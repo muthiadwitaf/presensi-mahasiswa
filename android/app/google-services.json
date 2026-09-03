@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "299716148859",
+    "project_id": "presensi-liveness-usm",
+    "storage_bucket": "presensi-liveness-usm.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:299716148859:android:a1e4c702a6d347d529ecde",
+        "android_client_info": {
+          "package_name": "com.usm.presensi.presensi_liveness"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDgM6Vv2zZyDI3k7ZlbtQeeiVHsfF79BWw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
