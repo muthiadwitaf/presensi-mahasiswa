@@ -13,11 +13,15 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
-  # Firebase (foto disimpan Base64 di Firestore, bukan Firebase Storage -
-  # lihat core/utils/image_compression.dart)
+  # Firebase - DIPERTAHANKAN SEMENTARA: masih dipakai fitur yang belum
+  # dimigrasi (jadwal/presensi/izin/notifikasi/matkul/ruang/wajah). Auth
+  # sudah pindah ke Supabase. Dihapus setelah semua fitur bermigrasi.
   firebase_core: ^3.8.0
   firebase_auth: ^5.3.3
   cloud_firestore: ^5.5.0
+
+  # Backend baru (Supabase/PostgreSQL) - target arsitektur
+  supabase_flutter: ^2.8.0
 
   # State management
   provider: ^6.1.2
@@ -30,6 +34,7 @@ dependencies:
 
   # Geofencing
   geolocator: ^13.0.2
+  geocoding: ^5.0.0
 
   # Attachments (bukti izin/sakit) & date formatting
   image_picker: ^1.1.2
@@ -39,9 +44,15 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
 
 flutter:
   uses-material-design: true
 
   assets:
     - assets/models/
+    - assets/images/
+
+flutter_launcher_icons:
+  android: true
+  image_path: "assets/images/logo.png"

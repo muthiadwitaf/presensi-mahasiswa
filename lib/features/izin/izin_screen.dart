@@ -5,11 +5,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/repositories/schedule_repository.dart';
 import '../../models/izin_model.dart';
-import '../../models/jadwal_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/izin_provider.dart';
-import '../../providers/jadwal_provider.dart';
 import '../../widgets/empty_state.dart';
 
 class IzinScreen extends StatelessWidget {
@@ -95,7 +94,9 @@ class _FormIzinSheet extends StatefulWidget {
 class _FormIzinSheetState extends State<_FormIzinSheet> {
   final _formKey = GlobalKey<FormState>();
   final _alasanController = TextEditingController();
-  JadwalModel? _jadwal;
+  final _scheduleRepo = ScheduleRepository();
+  late final Future<List<EnrolledCourseOption>> _matkulFuture = _scheduleRepo.myActiveCourseClasses();
+  EnrolledCourseOption? _matkul;
   DateTime _tanggal = DateTime.now();
   File? _bukti;
 
@@ -105,8 +106,8 @@ class _FormIzinSheetState extends State<_FormIzinSheet> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate() || _jadwal == null) {
-      if (_jadwal == null) {
+    if (!_formKey.currentState!.validate() || _matkul == null) {
+      if (_matkul == null) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pilih mata kuliah terlebih dahulu')));
       }
       return;
@@ -117,8 +118,8 @@ class _FormIzinSheetState extends State<_FormIzinSheet> {
       mahasiswaUid: auth.uid,
       mahasiswaNama: auth.nama,
       mahasiswaNim: auth.nim,
-      jadwalId: _jadwal!.id,
-      matkulNama: _jadwal!.matkulNama,
+      jadwalId: _matkul!.courseClassId,
+      matkulNama: _matkul!.courseName,
       tanggal: _tanggal,
       alasan: _alasanController.text.trim(),
       bukti: _bukti,
@@ -132,7 +133,6 @@ class _FormIzinSheetState extends State<_FormIzinSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final jadwalList = context.watch<JadwalProvider>().jadwalList;
     final izinProvider = context.watch<IzinProvider>();
 
     return Padding(
@@ -150,13 +150,19 @@ class _FormIzinSheetState extends State<_FormIzinSheet> {
           children: [
             const Text('Ajukan Izin/Sakit', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             const SizedBox(height: 16),
-            DropdownButtonFormField<JadwalModel>(
-              initialValue: _jadwal,
-              decoration: const InputDecoration(labelText: 'Mata Kuliah'),
-              items: jadwalList
-                  .map((j) => DropdownMenuItem(value: j, child: Text('${j.matkulNama} (${j.hariLabel})')))
-                  .toList(),
-              onChanged: (v) => setState(() => _jadwal = v),
+            FutureBuilder<List<EnrolledCourseOption>>(
+              future: _matkulFuture,
+              builder: (context, snapshot) {
+                final options = snapshot.data ?? [];
+                return DropdownButtonFormField<EnrolledCourseOption>(
+                  initialValue: _matkul,
+                  decoration: const InputDecoration(labelText: 'Mata Kuliah'),
+                  items: options
+                      .map((o) => DropdownMenuItem(value: o, child: Text('${o.courseCode} - ${o.courseName}')))
+                      .toList(),
+                  onChanged: (v) => setState(() => _matkul = v),
+                );
+              },
             ),
             const SizedBox(height: 12),
             ListTile(

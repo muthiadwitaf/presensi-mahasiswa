@@ -3,7 +3,7 @@
 class AppStrings {
   AppStrings._();
 
-  static const appName = 'Presensi Liveness';
+  static const appName = 'AttendU';
 
   static const gagalLiveness = 'Verifikasi wajah gagal (terdeteksi spoof)';
   static const gagalFaceMatch = 'Wajah tidak cocok dengan data yang terdaftar';

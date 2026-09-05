@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum UserRole { mahasiswa, dosen }
+enum UserRole { mahasiswa, dosen, admin }
 
 UserRole userRoleFromString(String value) {
   return UserRole.values.firstWhere(
@@ -36,6 +36,21 @@ class UserModel {
     this.wajahEmbedding,
     this.fotoWajahUpdatedAt,
   });
+
+  /// Baris dari tabel `public.users` di Supabase (lihat
+  /// `core/services/supabase_auth_service.dart`). Field foto/embedding wajah
+  /// TIDAK diisi lewat jalur ini - di arsitektur baru, embedding hidup di
+  /// tabel `face_profiles` yang tidak boleh dibaca langsung oleh client
+  /// (lihat RLS), jadi selalu null sampai fitur pendaftaran wajah (Fase
+  /// 9-11) dipindah memakai Edge Function `enroll-face`.
+  factory UserModel.fromSupabaseRow(Map<String, dynamic> map) {
+    return UserModel(
+      uid: map['id'] as String,
+      nim: map['username'] as String? ?? '',
+      nama: map['full_name'] as String? ?? '',
+      role: userRoleFromString(map['role'] as String? ?? 'mahasiswa'),
+    );
+  }
 
   factory UserModel.fromMap(String uid, Map<String, dynamic> map) {
     return UserModel(

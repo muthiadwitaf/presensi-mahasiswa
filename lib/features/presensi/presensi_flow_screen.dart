@@ -5,8 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../../core/repositories/face_profile_repository.dart';
 import '../../core/theme/app_theme.dart';
-import '../../models/jadwal_model.dart';
+import '../../models/session_today_model.dart';
 import '../../models/user_model.dart';
 import '../../providers/presensi_provider.dart';
 import 'widgets/verification_status_widget.dart';
@@ -18,7 +19,7 @@ class PresensiFlowScreen extends StatefulWidget {
     required this.mahasiswa,
   });
 
-  final JadwalModel sesi;
+  final SessionToday sesi;
   final UserModel mahasiswa;
 
   @override
@@ -26,6 +27,7 @@ class PresensiFlowScreen extends StatefulWidget {
 }
 
 class _PresensiFlowScreenState extends State<PresensiFlowScreen> with WidgetsBindingObserver {
+  final _faceProfileRepo = FaceProfileRepository();
   CameraController? _controller;
   CameraDescription? _camera;
   bool _initializing = true;
@@ -40,7 +42,7 @@ class _PresensiFlowScreenState extends State<PresensiFlowScreen> with WidgetsBin
     _init();
     _sesiTicker = Timer.periodic(const Duration(seconds: 5), (_) {
       if (!mounted) return;
-      final masihAktif = widget.sesi.isActiveAt(DateTime.now());
+      final masihAktif = widget.sesi.isActiveNow();
       if (!masihAktif && !_sesiBerakhir) {
         setState(() => _sesiBerakhir = true);
         _stopStream();
@@ -51,7 +53,8 @@ class _PresensiFlowScreenState extends State<PresensiFlowScreen> with WidgetsBin
   Future<void> _init() async {
     final provider = context.read<PresensiProvider>();
     try {
-      if (widget.mahasiswa.wajahEmbedding == null) {
+      final wajahTerdaftar = (await _faceProfileRepo.status()).hasProfile;
+      if (!wajahTerdaftar) {
         setState(() {
           _initError = AppStrings.gagalBelumDaftarWajah;
           _initializing = false;
@@ -60,8 +63,9 @@ class _PresensiFlowScreenState extends State<PresensiFlowScreen> with WidgetsBin
       }
 
       await provider.siapkanModel();
-      // Rekam lokasi live sebagai bagian dari log presensi (bukan syarat
-      // lolos/gagal) - kegagalan lokasi tidak menghalangi alur presensi.
+      // Rekam lokasi live sebagai evidence yang dikirim ke server bersama
+      // hasil verifikasi wajah - kegagalan lokasi tidak menghalangi alur
+      // presensi di client, server yang memutuskan apakah lokasi wajib.
       unawaited(provider.catatLokasiSaatIni());
 
       final cameras = await availableCameras();
@@ -100,7 +104,6 @@ class _PresensiFlowScreenState extends State<PresensiFlowScreen> with WidgetsBin
       camera: camera,
       deviceOrientation: controller.value.deviceOrientation,
       sesi: widget.sesi,
-      mahasiswa: widget.mahasiswa,
     );
 
     if (provider.sudahTercatat) {
@@ -141,7 +144,7 @@ class _PresensiFlowScreenState extends State<PresensiFlowScreen> with WidgetsBin
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text(widget.sesi.matkulNama, style: const TextStyle(color: Colors.white)),
+        title: Text(widget.sesi.courseName, style: const TextStyle(color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       extendBodyBehindAppBar: true,
@@ -190,7 +193,7 @@ class _PresensiFlowScreenState extends State<PresensiFlowScreen> with WidgetsBin
         icon: Icons.check_circle,
         color: AppTheme.success,
         title: AppStrings.berhasilPresensi,
-        message: '${widget.mahasiswa.nama} • ${widget.sesi.matkulNama}',
+        message: '${widget.mahasiswa.nama} • ${widget.sesi.courseName}',
         actionLabel: 'Selesai',
         onAction: () => Navigator.of(context).pop(),
       );

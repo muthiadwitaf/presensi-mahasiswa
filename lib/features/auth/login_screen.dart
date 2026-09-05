@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/auth_background.dart';
@@ -77,30 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Center(
-                        child: Container(
-                          width: 68,
-                          height: 68,
-                          decoration: BoxDecoration(
-                            gradient: AppTheme.brandGradient,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(color: AppTheme.primary.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 8)),
-                            ],
-                          ),
-                          child: const Icon(Icons.fingerprint, color: Colors.white, size: 36),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        AppStrings.appName,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Presensi Anti-Titip Absen',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 13),
+                        child: Image.asset('assets/images/logo.png', width: 180),
                       ),
                       const SizedBox(height: 28),
                       GlassCard(

@@ -1,62 +1,61 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../core/constants/app_strings.dart';
-import '../core/repositories/presensi_repository.dart';
+import '../core/repositories/attendance_repository.dart';
 import '../core/services/face_detection_service.dart';
 import '../core/services/face_embedding_service.dart';
 import '../core/services/liveness_service.dart';
 import '../core/services/location_service.dart';
-import '../core/utils/face_matching.dart';
-import '../models/jadwal_model.dart';
-import '../models/presensi_model.dart';
-import '../models/user_model.dart';
+import '../models/session_today_model.dart';
 
 enum CekStatus { belum, mengecek, valid, invalid }
 
-/// Mengorkestrasi alur inti presensi: validasi sesi aktif, deteksi wajah +
-/// klasifikasi liveness, DAN (Opsi A) pencocokan identitas wajah terhadap
-/// data terdaftar per frame kamera - mencatat hasil akhir ke Firestore hanya
-/// kalau wajah lolos liveness & cocok dengan data terdaftar. Lokasi live
-/// direkam sebagai bagian dari log (bukan syarat lolos/gagal).
+/// Mengorkestrasi alur inti presensi di device: deteksi wajah + klasifikasi
+/// liveness + hitung embedding (semua on-device, throttled per frame lewat
+/// `_isProcessingFrame`). Keputusan HADIR/valid/tidak TIDAK dibuat di sini -
+/// hasil klasifikasi lokal cuma dikirim sebagai evidence ke Edge Function
+/// `submit-attendance`, yang jadi satu-satunya penentu status (lihat
+/// `AttendanceRepository`). Provider ini cuma menerjemahkan respons server
+/// ke state UI.
 class PresensiProvider extends ChangeNotifier {
   PresensiProvider({
     LocationService? locationService,
     FaceDetectionService? faceDetectionService,
     LivenessService? livenessService,
     FaceEmbeddingService? faceEmbeddingService,
-    PresensiRepository? presensiRepository,
+    AttendanceRepository? attendanceRepository,
   })  : _locationService = locationService ?? LocationService(),
         _faceDetectionService = faceDetectionService ?? FaceDetectionService(),
         _livenessService = livenessService ?? LivenessService(),
         _faceEmbeddingService = faceEmbeddingService ?? FaceEmbeddingService(),
-        _presensiRepository = presensiRepository ?? PresensiRepository();
+        _attendanceRepository = attendanceRepository ?? AttendanceRepository();
 
   final LocationService _locationService;
   final FaceDetectionService _faceDetectionService;
   final LivenessService _livenessService;
   final FaceEmbeddingService _faceEmbeddingService;
-  final PresensiRepository _presensiRepository;
+  final AttendanceRepository _attendanceRepository;
 
-  double? clockInLat;
-  double? clockInLng;
+  Position? _position;
 
   CekStatus livenessStatus = CekStatus.belum;
   double? livenessConfidence;
   String? livenessMessage;
 
   CekStatus faceMatchStatus = CekStatus.belum;
-  double? faceMatchDistance;
   String? faceMatchMessage;
 
   bool sudahTercatat = false;
   bool gagalDicatat = false;
   String? errorUmum;
+  String? attendanceIdTercatat;
 
   bool _isProcessingFrame = false;
   bool _modelReady = false;
-  bool _presensiTersimpan = false;
+  bool _submitting = false;
 
   Future<void> siapkanModel() async {
     if (_modelReady) return;
@@ -68,32 +67,28 @@ class PresensiProvider extends ChangeNotifier {
   }
 
   void resetUntukSesiBaru() {
-    clockInLat = null;
-    clockInLng = null;
     livenessStatus = CekStatus.belum;
     livenessConfidence = null;
     livenessMessage = null;
     faceMatchStatus = CekStatus.belum;
-    faceMatchDistance = null;
     faceMatchMessage = null;
     sudahTercatat = false;
     gagalDicatat = false;
     errorUmum = null;
-    _presensiTersimpan = false;
+    attendanceIdTercatat = null;
+    _submitting = false;
     notifyListeners();
   }
 
-  /// Rekam lokasi live perangkat untuk dicatat sebagai bagian dari log
-  /// presensi (bukan syarat lolos/gagal) - gagal diam-diam kalau lokasi
-  /// tidak tersedia, supaya tidak menghalangi alur presensi.
+  /// Rekam lokasi live perangkat untuk dikirim sebagai evidence ke server -
+  /// gagal diam-diam kalau lokasi tidak tersedia (server yang memutuskan
+  /// apakah lokasi wajib untuk sesi ini, lihat FAIL_MODE_MISMATCH/
+  /// FAIL_GEOFENCE di `submit-attendance`).
   Future<void> catatLokasiSaatIni() async {
     try {
-      final position = await _locationService.getCurrentPosition();
-      clockInLat = position.latitude;
-      clockInLng = position.longitude;
+      _position = await _locationService.getCurrentPosition();
     } catch (_) {
-      clockInLat = null;
-      clockInLng = null;
+      _position = null;
     }
     notifyListeners();
   }
@@ -105,20 +100,11 @@ class PresensiProvider extends ChangeNotifier {
     required CameraImage image,
     required CameraDescription camera,
     required DeviceOrientation deviceOrientation,
-    required JadwalModel sesi,
-    required UserModel mahasiswa,
+    required SessionToday sesi,
   }) async {
-    if (_isProcessingFrame || _presensiTersimpan || !_modelReady) return;
+    if (_isProcessingFrame || sudahTercatat || _submitting || !_modelReady) return;
     _isProcessingFrame = true;
     try {
-      final wajahTerdaftar = mahasiswa.wajahEmbedding;
-      if (wajahTerdaftar == null) {
-        faceMatchStatus = CekStatus.invalid;
-        faceMatchMessage = AppStrings.gagalBelumDaftarWajah;
-        notifyListeners();
-        return;
-      }
-
       final rotation = _faceDetectionService.computeRotationCompensation(
         camera: camera,
         deviceOrientation: deviceOrientation,
@@ -147,34 +133,20 @@ class PresensiProvider extends ChangeNotifier {
       livenessConfidence = result.confidence;
       livenessStatus = result.isReal ? CekStatus.valid : CekStatus.invalid;
       livenessMessage = result.isReal ? null : AppStrings.gagalLiveness;
+      notifyListeners();
 
-      if (!result.isReal) {
-        faceMatchStatus = CekStatus.belum;
-        faceMatchMessage = null;
-        notifyListeners();
-        return;
-      }
+      // Pre-filter lokal murni untuk menghemat panggilan server (jangan
+      // submit setiap frame) - keputusan REAL/SPOOF final tetap di server
+      // lewat threshold `anti_spoof_threshold`, skor mentah tetap dikirim.
+      if (!result.isReal) return;
 
       final embedding = _faceEmbeddingService.embedFromCameraImage(
         cameraImage: image,
         boundingBox: boundingBox,
         rotationDegrees: rotation,
       );
-      final distance = FaceMatching.euclideanDistance(embedding, wajahTerdaftar);
-      final isMatch = distance <= FaceMatching.threshold;
-      faceMatchDistance = distance;
-      faceMatchStatus = isMatch ? CekStatus.valid : CekStatus.invalid;
-      faceMatchMessage = isMatch ? null : AppStrings.gagalFaceMatch;
-      notifyListeners();
 
-      if (isMatch) {
-        await _catatPresensi(
-          sesi: sesi,
-          mahasiswa: mahasiswa,
-          livenessConfidence: result.confidence,
-          faceMatchDistance: distance,
-        );
-      }
+      await _submitKeServer(sesi: sesi, embedding: embedding, livenessRawScore: result.rawScore);
     } catch (e) {
       errorUmum = 'Gagal memproses frame kamera: $e';
       notifyListeners();
@@ -183,48 +155,50 @@ class PresensiProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _catatPresensi({
-    required JadwalModel sesi,
-    required UserModel mahasiswa,
-    required double livenessConfidence,
-    required double faceMatchDistance,
+  Future<void> _submitKeServer({
+    required SessionToday sesi,
+    required List<double> embedding,
+    required double livenessRawScore,
   }) async {
-    if (_presensiTersimpan) return;
-    _presensiTersimpan = true;
+    _submitting = true;
+    faceMatchStatus = CekStatus.mengecek;
+    notifyListeners();
     try {
-      final sudahAda = await _presensiRepository.sudahPresensiHariIni(
-        mahasiswaUid: mahasiswa.uid,
-        jadwalId: sesi.id,
+      final result = await _attendanceRepository.submitAttendance(
+        meetingSessionId: sesi.meetingSessionId,
+        courseClassId: sesi.meetingSessionId == null ? sesi.courseClassId : null,
+        sessionDate: sesi.meetingSessionId == null ? DateTime.now() : null,
+        probeEmbedding: embedding,
+        livenessScore: livenessRawScore,
+        latitude: _position?.latitude,
+        longitude: _position?.longitude,
+        accuracyM: _position?.accuracy,
+        isMocked: _position?.isMocked,
       );
-      if (sudahAda) {
-        sudahTercatat = true;
-        notifyListeners();
-        return;
-      }
-
-      final presensi = PresensiModel(
-        id: '',
-        jadwalId: sesi.id,
-        matkulNama: sesi.matkulNama,
-        mahasiswaUid: mahasiswa.uid,
-        mahasiswaNama: mahasiswa.nama,
-        mahasiswaNim: mahasiswa.nim,
-        timestamp: DateTime.now(),
-        clockInLat: clockInLat,
-        clockInLng: clockInLng,
-        statusLiveness: true,
-        livenessConfidence: livenessConfidence,
-        statusFaceMatch: true,
-        faceMatchDistance: faceMatchDistance,
-        statusAkhir: StatusAkhir.hadir,
-      );
-      await _presensiRepository.catat(presensi);
+      faceMatchStatus = CekStatus.valid;
+      faceMatchMessage = null;
       sudahTercatat = true;
-      notifyListeners();
+      attendanceIdTercatat = result.attendanceId;
+    } on SubmitAttendanceException catch (e) {
+      if (e.code == 'FAIL_DUPLICATE') {
+        // Sudah tercatat dari percobaan sebelumnya - bukan kegagalan.
+        sudahTercatat = true;
+        faceMatchStatus = CekStatus.valid;
+      } else {
+        faceMatchStatus = CekStatus.invalid;
+        faceMatchMessage = e.userMessage;
+        // Kegagalan yang terkait wajah boleh dicoba ulang frame berikutnya;
+        // kegagalan sesi/duplikat/dsb bersifat final untuk sesi ini.
+        if (e.code != 'FAIL_LIVENESS' && e.code != 'FAIL_FACE_MATCH') {
+          gagalDicatat = true;
+          errorUmum = e.userMessage;
+        }
+      }
     } catch (e) {
       gagalDicatat = true;
-      errorUmum = 'Gagal menyimpan presensi: $e';
-      _presensiTersimpan = false;
+      errorUmum = 'Gagal menghubungi server: $e';
+    } finally {
+      _submitting = false;
       notifyListeners();
     }
   }
@@ -233,18 +207,17 @@ class PresensiProvider extends ChangeNotifier {
   String? clockOutError;
 
   /// Clock Out: hanya catat waktu & lokasi (tanpa verifikasi liveness/wajah
-  /// ulang, sesuai keputusan produk).
-  Future<bool> clockOut(PresensiModel presensi) async {
+  /// ulang, sesuai keputusan produk) - lewat Edge Function `submit-checkout`.
+  Future<bool> clockOut(String attendanceId) async {
     clockOutBusy = true;
     clockOutError = null;
     notifyListeners();
     try {
       final position = await _locationService.getCurrentPosition();
-      await _presensiRepository.catatClockOut(
-        presensi.id,
-        waktu: DateTime.now(),
-        lat: position.latitude,
-        lng: position.longitude,
+      await _attendanceRepository.submitCheckout(
+        attendanceId: attendanceId,
+        latitude: position.latitude,
+        longitude: position.longitude,
       );
       return true;
     } catch (e) {

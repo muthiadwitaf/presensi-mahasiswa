@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/repositories/presensi_repository.dart';
+import '../../core/repositories/attendance_repository.dart';
+import '../../core/repositories/face_profile_repository.dart';
 import '../../core/theme/app_theme.dart';
-import '../../models/jadwal_model.dart';
-import '../../models/presensi_model.dart';
+import '../../models/session_today_model.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/jadwal_provider.dart';
@@ -25,16 +25,29 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   Timer? _ticker;
-  final _presensiRepo = PresensiRepository();
+  final _attendanceRepo = AttendanceRepository();
+  final _faceProfileRepo = FaceProfileRepository();
+  late Future<bool> _wajahTerdaftarFuture;
 
   @override
   void initState() {
     super.initState();
-    // Jendela waktu sesi aktif bergantung pada jam berjalan, bukan cuma
-    // perubahan data Firestore - refresh berkala supaya status tetap akurat.
-    _ticker = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) setState(() {});
-    });
+    _wajahTerdaftarFuture = _faceProfileRepo.status().then((s) => s.hasProfile);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _muatJadwal());
+    // Postgres bukan realtime stream seperti Firestore dulu - refresh
+    // berkala supaya jendela waktu sesi & data tetap akurat.
+    _ticker = Timer.periodic(const Duration(seconds: 30), (_) => _muatJadwal());
+  }
+
+  void _muatJadwal() {
+    final user = context.read<AuthProvider>().currentUser;
+    if (user == null) return;
+    final jadwalProvider = context.read<JadwalProvider>();
+    if (user.role == UserRole.dosen) {
+      jadwalProvider.refreshDosen();
+    } else {
+      jadwalProvider.refreshMahasiswa();
+    }
   }
 
   @override
@@ -43,33 +56,40 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  void _bukaPresensi(JadwalModel sesi) async {
+  void _bukaPresensi(SessionToday sesi) async {
     final mahasiswa = context.read<AuthProvider>().currentUser!;
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PresensiFlowScreen(sesi: sesi, mahasiswa: mahasiswa),
       ),
     );
-    if (mounted) context.read<PresensiProvider>().resetUntukSesiBaru();
+    if (mounted) {
+      context.read<PresensiProvider>().resetUntukSesiBaru();
+      _muatJadwal();
+    }
   }
 
-  Future<void> _clockOut(PresensiModel presensi) async {
+  Future<void> _clockOut(String attendanceId) async {
     final provider = context.read<PresensiProvider>();
-    final ok = await provider.clockOut(presensi);
-    if (!ok && mounted && provider.clockOutError != null) {
+    final ok = await provider.clockOut(attendanceId);
+    if (ok) {
+      _muatJadwal();
+    } else if (mounted && provider.clockOutError != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(provider.clockOutError!)));
     }
   }
 
   void _bukaDaftarWajah() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => Scaffold(
-          appBar: AppBar(title: const Text('Wajah Terdaftar')),
-          body: const WajahTerdaftarScreen(),
-        ),
-      ),
-    );
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => Scaffold(
+              appBar: AppBar(title: const Text('Wajah Terdaftar')),
+              body: const WajahTerdaftarScreen(),
+            ),
+          ),
+        )
+        .then((_) => setState(() => _wajahTerdaftarFuture = _faceProfileRepo.status().then((s) => s.hasProfile)));
   }
 
   @override
@@ -77,21 +97,20 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = context.watch<AuthProvider>().currentUser;
     if (user == null) return const SizedBox.shrink();
     final jadwalProvider = context.watch<JadwalProvider>();
-    final sesiHariIni = user.role == UserRole.dosen
-        ? jadwalProvider.sesiHariIni().where((j) => j.dosenNama == user.nama).toList()
-        : jadwalProvider.sesiHariIni();
+    final isDosen = user.role == UserRole.dosen;
+    final sesiHariIni = isDosen ? jadwalProvider.sesiDosenHariIni : jadwalProvider.sesiMahasiswaHariIni;
 
     return RefreshIndicator(
-      onRefresh: () async => setState(() {}),
+      onRefresh: () async => _muatJadwal(),
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           _Greeting(nama: user.nama),
           const SizedBox(height: 16),
-          if (user.role == UserRole.mahasiswa) ...[
-            _buildPresensiCard(context, jadwalProvider, user),
+          if (!isDosen) ...[
+            _buildPresensiCard(context, jadwalProvider),
             const SizedBox(height: 16),
-            _KehadiranSemesterCard(mahasiswaUid: user.uid, repo: _presensiRepo),
+            _KehadiranSemesterCard(repo: _attendanceRepo),
             const SizedBox(height: 20),
           ],
           Row(
@@ -102,46 +121,32 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          if (sesiHariIni.isEmpty)
+          if (jadwalProvider.isLoading && sesiHariIni.isEmpty)
+            const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+          else if (sesiHariIni.isEmpty)
             const EmptyState(message: 'Tidak ada jadwal mata kuliah hari ini', icon: Icons.event_busy)
           else
-            ...sesiHariIni.map((j) => _JadwalHariIniCard(
-                  jadwal: j,
-                  mahasiswaUid: user.role == UserRole.mahasiswa ? user.uid : null,
-                  repo: _presensiRepo,
-                )),
+            ...sesiHariIni.map((s) => _JadwalHariIniCard(sesi: s, tampilkanStatus: !isDosen)),
         ],
       ),
     );
   }
 
-  Widget _buildPresensiCard(BuildContext context, JadwalProvider jadwalProvider, UserModel mahasiswa) {
+  Widget _buildPresensiCard(BuildContext context, JadwalProvider jadwalProvider) {
     final presensiProvider = context.watch<PresensiProvider>();
     final sesi = jadwalProvider.sesiAktifSekarang();
 
-    if (sesi == null) {
-      return SessionStatusCard(
-        sesi: null,
-        presensi: presensiProvider,
-        wajahTerdaftar: mahasiswa.wajahEmbedding != null,
-        presensiHariIni: null,
-        onMulaiPresensi: () {},
-        onDaftarWajah: _bukaDaftarWajah,
-        onClockOut: () {},
-      );
-    }
-
-    return StreamBuilder<PresensiModel?>(
-      stream: _presensiRepo.watchPresensiHariIni(mahasiswaUid: mahasiswa.uid, jadwalId: sesi.id),
+    return FutureBuilder<bool>(
+      future: _wajahTerdaftarFuture,
       builder: (context, snapshot) {
+        final wajahTerdaftar = snapshot.data ?? false;
         return SessionStatusCard(
           sesi: sesi,
           presensi: presensiProvider,
-          wajahTerdaftar: mahasiswa.wajahEmbedding != null,
-          presensiHariIni: snapshot.data,
-          onMulaiPresensi: () => _bukaPresensi(sesi),
+          wajahTerdaftar: wajahTerdaftar,
+          onMulaiPresensi: sesi == null ? () {} : () => _bukaPresensi(sesi),
           onDaftarWajah: _bukaDaftarWajah,
-          onClockOut: () => _clockOut(snapshot.data!),
+          onClockOut: sesi?.attendanceId == null ? () {} : () => _clockOut(sesi!.attendanceId!),
         );
       },
     );
@@ -185,17 +190,16 @@ class _Greeting extends StatelessWidget {
 }
 
 class _KehadiranSemesterCard extends StatelessWidget {
-  const _KehadiranSemesterCard({required this.mahasiswaUid, required this.repo});
-  final String mahasiswaUid;
-  final PresensiRepository repo;
+  const _KehadiranSemesterCard({required this.repo});
+  final AttendanceRepository repo;
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<PresensiModel>>(
-      stream: repo.watchByMahasiswa(mahasiswaUid),
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: repo.myAttendanceHistory(),
       builder: (context, snapshot) {
         final logs = snapshot.data ?? [];
-        final hadir = logs.where((l) => l.statusAkhir == StatusAkhir.hadir).length;
+        final hadir = logs.where((l) => l['status'] == 'HADIR' || l['status'] == 'TERLAMBAT').length;
         final total = logs.length;
         final persen = total == 0 ? 0.0 : hadir / total * 100;
 
@@ -239,46 +243,39 @@ class _KehadiranSemesterCard extends StatelessWidget {
 }
 
 class _JadwalHariIniCard extends StatelessWidget {
-  const _JadwalHariIniCard({required this.jadwal, required this.mahasiswaUid, required this.repo});
+  const _JadwalHariIniCard({required this.sesi, required this.tampilkanStatus});
 
-  final JadwalModel jadwal;
-  final String? mahasiswaUid;
-  final PresensiRepository repo;
+  final SessionToday sesi;
+  final bool tampilkanStatus;
 
   @override
   Widget build(BuildContext context) {
-    final uid = mahasiswaUid;
+    Widget? trailing;
+    if (tampilkanStatus && sesi.sudahClockIn) {
+      trailing = const Chip(
+        avatar: Icon(Icons.check_circle, size: 16, color: Colors.white),
+        label: Text('HADIR', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+        backgroundColor: AppTheme.success,
+        visualDensity: VisualDensity.compact,
+      );
+    } else if (sesi.isActiveNow()) {
+      trailing = const Chip(
+        label: Text('Aktif', style: TextStyle(fontSize: 11)),
+        backgroundColor: Color(0xFFDFF5E1),
+        visualDensity: VisualDensity.compact,
+      );
+    }
+
     return Card(
       child: ListTile(
         leading: const Icon(Icons.schedule, color: AppTheme.textSecondary),
-        title: Text(jadwal.matkulNama, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text('${jadwal.jamMulai} - ${jadwal.jamSelesai} • ${jadwal.ruangNama} • ${jadwal.dosenNama}'),
-        trailing: uid == null
-            ? (jadwal.isActiveAt(DateTime.now())
-                ? const Chip(label: Text('Aktif'), backgroundColor: Color(0xFFDFF5E1))
-                : null)
-            : StreamBuilder<PresensiModel?>(
-                stream: repo.watchPresensiHariIni(mahasiswaUid: uid, jadwalId: jadwal.id),
-                builder: (context, snapshot) {
-                  final sudahHadir = snapshot.data != null;
-                  if (sudahHadir) {
-                    return const Chip(
-                      avatar: Icon(Icons.check_circle, size: 16, color: Colors.white),
-                      label: Text('HADIR', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
-                      backgroundColor: AppTheme.success,
-                      visualDensity: VisualDensity.compact,
-                    );
-                  }
-                  if (jadwal.isActiveAt(DateTime.now())) {
-                    return const Chip(
-                      label: Text('Aktif', style: TextStyle(fontSize: 11)),
-                      backgroundColor: Color(0xFFDFF5E1),
-                      visualDensity: VisualDensity.compact,
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
-              ),
+        title: Text(sesi.courseName, style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(
+          '${sesi.startTimeLabel} - ${sesi.endTimeLabel} • '
+          '${sesi.mode == 'ONLINE' ? 'Online' : sesi.locationName ?? 'Offline'}'
+          '${sesi.lecturerName != null ? ' • ${sesi.lecturerName}' : ''}',
+        ),
+        trailing: trailing,
       ),
     );
   }

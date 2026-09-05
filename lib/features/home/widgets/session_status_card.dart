@@ -1,9 +1,9 @@
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/services/geocoding_service.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../models/jadwal_model.dart';
-import '../../../models/presensi_model.dart';
+import '../../../models/session_today_model.dart';
 import '../../../providers/presensi_provider.dart';
 
 /// Kartu "Absensi Hari Ini" - tata letak sengaja dibuat ringkas & satu
@@ -16,16 +16,14 @@ class SessionStatusCard extends StatelessWidget {
     required this.sesi,
     required this.presensi,
     required this.wajahTerdaftar,
-    required this.presensiHariIni,
     required this.onMulaiPresensi,
     required this.onDaftarWajah,
     required this.onClockOut,
   });
 
-  final JadwalModel? sesi;
+  final SessionToday? sesi;
   final PresensiProvider presensi;
   final bool wajahTerdaftar;
-  final PresensiModel? presensiHariIni;
   final VoidCallback onMulaiPresensi;
   final VoidCallback onDaftarWajah;
   final VoidCallback onClockOut;
@@ -33,8 +31,8 @@ class SessionStatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final adaSesi = sesi != null;
-    final sudahClockIn = presensiHariIni != null;
-    final sudahClockOut = presensiHariIni?.sudahClockOut ?? false;
+    final sudahClockIn = sesi?.sudahClockIn ?? false;
+    final sudahClockOut = sesi?.sudahClockOut ?? false;
 
     final (String statusLabel, Color statusColor) = sudahClockOut
         ? ('Selesai', AppTheme.success)
@@ -72,20 +70,28 @@ class SessionStatusCard extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              adaSesi ? sesi!.matkulNama : 'Tidak ada sesi aktif',
+              adaSesi ? sesi!.courseName : 'Tidak ada sesi aktif',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
             if (adaSesi)
               Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(
-                  '${sesi!.jamMulai} → ${sesi!.jamSelesai}',
+                  '${sesi!.startTimeLabel} → ${sesi!.endTimeLabel}',
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                 ),
               ),
             const SizedBox(height: 12),
+            if (sudahClockIn) ...[
+              _BerhasilBanner(sesi: sesi!),
+              const SizedBox(height: 10),
+              if (sesi!.checkInLatitude != null && sesi!.checkInLongitude != null) ...[
+                _LocationRow(latitude: sesi!.checkInLatitude!, longitude: sesi!.checkInLongitude!),
+                const SizedBox(height: 10),
+              ],
+            ],
             if (sudahClockOut)
-              _ClockSummary(presensi: presensiHariIni!)
+              _ClockSummary(sesi: sesi!)
             else if (sudahClockIn)
               _buildClockOutRow(context)
             else
@@ -144,13 +150,14 @@ class SessionStatusCard extends StatelessWidget {
   }
 
   Widget _buildClockOutRow(BuildContext context) {
-    final bisaClockOut = sesi?.isActiveAt(DateTime.now()) ?? false;
+    final bisaClockOut = sesi?.isActiveNow() ?? false;
+    final jamMasuk = sesi?.checkInAt;
     return Row(
       children: [
         Expanded(
           child: Text(
-            bisaClockOut
-                ? 'Sudah Clock In pukul ${DateFormat('HH:mm').format(presensiHariIni!.timestamp)}'
+            bisaClockOut && jamMasuk != null
+                ? 'Sudah Clock In pukul ${DateFormat('HH:mm').format(jamMasuk)}'
                 : 'Clock Out hanya bisa selama sesi masih berlangsung',
             style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600),
           ),
@@ -164,7 +171,7 @@ class SessionStatusCard extends StatelessWidget {
               : const Icon(Icons.logout, size: 18),
           label: Text(presensi.clockOutBusy ? '...' : 'Clock Out'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.warning,
+            backgroundColor: AppTheme.danger,
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
           ),
         ),
@@ -191,6 +198,13 @@ class SessionStatusCard extends StatelessWidget {
             ),
           ),
         ),
+        if (wajahTerdaftar)
+          IconButton(
+            onPressed: onDaftarWajah,
+            icon: const Icon(Icons.visibility_outlined, size: 20, color: AppTheme.textSecondary),
+            tooltip: 'Lihat foto terdaftar',
+            visualDensity: VisualDensity.compact,
+          ),
         TextButton.icon(
           onPressed: onDaftarWajah,
           icon: const Icon(Icons.camera_alt_outlined, size: 16),
@@ -202,10 +216,81 @@ class SessionStatusCard extends StatelessWidget {
   }
 }
 
-class _ClockSummary extends StatelessWidget {
-  const _ClockSummary({required this.presensi});
+/// Banner hijau setelah Clock In berhasil - "Tepat waktu" atau "Terlambat
+/// X menit" berdasarkan status & minutes_late dari server (submit-attendance),
+/// bukan dihitung ulang di client.
+class _BerhasilBanner extends StatelessWidget {
+  const _BerhasilBanner({required this.sesi});
+  final SessionToday sesi;
 
-  final PresensiModel presensi;
+  @override
+  Widget build(BuildContext context) {
+    final terlambat = sesi.attendanceStatus == 'TERLAMBAT' && (sesi.minutesLate ?? 0) > 0;
+    final keterangan = terlambat ? 'Terlambat ${sesi.minutesLate} menit.' : 'Tepat waktu!';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: (terlambat ? AppTheme.warning : AppTheme.success).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.check_circle, size: 18, color: terlambat ? AppTheme.warning : AppTheme.success),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Clock In ${sesi.courseName} berhasil. $keterangan',
+              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Baris lokasi (alamat hasil reverse geocoding) - gagal-diam (tidak
+/// ditampilkan) kalau alamat tidak bisa didapat, lihat [GeocodingService].
+class _LocationRow extends StatefulWidget {
+  const _LocationRow({required this.latitude, required this.longitude});
+  final double latitude;
+  final double longitude;
+
+  @override
+  State<_LocationRow> createState() => _LocationRowState();
+}
+
+class _LocationRowState extends State<_LocationRow> {
+  final _geocoding = GeocodingService();
+  String? _alamat;
+
+  @override
+  void initState() {
+    super.initState();
+    _geocoding.alamatDari(widget.latitude, widget.longitude).then((a) {
+      if (mounted) setState(() => _alamat = a);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_alamat == null) return const SizedBox.shrink();
+    return Row(
+      children: [
+        Icon(Icons.location_on_outlined, size: 16, color: Colors.grey.shade600),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(_alamat!, style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600)),
+        ),
+      ],
+    );
+  }
+}
+
+class _ClockSummary extends StatelessWidget {
+  const _ClockSummary({required this.sesi});
+
+  final SessionToday sesi;
 
   @override
   Widget build(BuildContext context) {
@@ -222,7 +307,8 @@ class _ClockSummary extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Clock In ${jam.format(presensi.timestamp)} • Clock Out ${jam.format(presensi.clockOutAt!)}',
+              'Clock In ${sesi.checkInAt != null ? jam.format(sesi.checkInAt!) : '-'} • '
+              'Clock Out ${sesi.checkOutAt != null ? jam.format(sesi.checkOutAt!) : '-'}',
               style: const TextStyle(fontSize: 13),
             ),
           ),
