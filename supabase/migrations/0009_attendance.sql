@@ -1,4 +1,3 @@
--- attendance_records = authoritative outcome, exactly one row per (student, session).
 create table attendance_records (
   id                  uuid primary key default gen_random_uuid(),
   student_id          uuid not null references students(id) on delete cascade,
@@ -40,7 +39,7 @@ create table attendance_records (
   override_reason     text,
   previous_status     attendance_status,
 
-  leave_request_id    uuid,  -- FK added in 0010 (leave_requests created after)
+  leave_request_id    uuid,
 
   notes               text,
   created_at          timestamptz not null default now(),
@@ -61,7 +60,6 @@ create index attendance_checkin_idx         on attendance_records(check_in_at de
 create index attendance_student_session_idx on attendance_records(student_id, meeting_session_id);
 create index attendance_enrollment_idx      on attendance_records(enrollment_id);
 
--- attendance_verifications = append-only log of every attempt, pass or fail. The research dataset.
 create table attendance_verifications (
   id                    uuid primary key default gen_random_uuid(),
   attendance_record_id  uuid references attendance_records(id) on delete set null,
@@ -121,7 +119,6 @@ create index av_record_idx      on attendance_verifications(attendance_record_id
 create index av_experiment_idx  on attendance_verifications(experiment_tag) where experiment_tag is not null;
 create index av_label_idx       on attendance_verifications(ground_truth_label) where ground_truth_label is not null;
 
--- Anti-replay one-shot nonce, issued right before the camera opens.
 create table attendance_challenges (
   id                 uuid primary key default gen_random_uuid(),
   student_id         uuid not null references students(id) on delete cascade,

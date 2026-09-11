@@ -1,7 +1,6 @@
--- 1:1 with auth.users. Role lives here and is mirrored to the JWT app_metadata by a trigger (0014).
 create table users (
   id            uuid primary key references auth.users(id) on delete cascade,
-  username      text not null unique,       -- NIM or NIP; the login handle
+  username      text not null unique,
   full_name     text not null,
   role          user_role not null,
   status        user_status not null default 'active',
@@ -58,7 +57,6 @@ alter table study_programs add constraint study_programs_head_fk
 alter table class_groups add constraint class_groups_advisor_fk
   foreign key (advisor_lecturer_id) references lecturers(id) on delete set null;
 
--- Biometric reference, split from `students` so RLS can hide it even from its owner.
 create table face_profiles (
   id                 uuid primary key default gen_random_uuid(),
   student_id         uuid not null unique references students(id) on delete cascade,

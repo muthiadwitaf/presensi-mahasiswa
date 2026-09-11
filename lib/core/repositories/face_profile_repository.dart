@@ -39,16 +39,6 @@ class EnrollFaceException implements Exception {
   String toString() => 'EnrollFaceException($code: $message)';
 }
 
-/// Pendaftaran wajah lewat Edge Function `enroll-face` - client TIDAK
-/// pernah menulis embedding langsung ke `face_profiles` (RLS tidak
-/// memberi hak insert/update/select sama sekali ke mahasiswa, bahkan untuk
-/// baris miliknya sendiri). Status baca lewat RPC `my_face_profile_status`
-/// yang sengaja tidak mengembalikan embedding/foto.
-///
-/// CATATAN: tidak ada Edge Function untuk menghapus face profile sendiri -
-/// backend saat ini cuma mendukung enroll (yang otomatis mengarsipkan versi
-/// lama, lihat `face_profile_history`), bukan delete. Jangan tawarkan tombol
-/// "hapus" di UI sampai kapabilitas itu ada.
 class FaceProfileRepository {
   FaceProfileRepository({SupabaseClient? client}) : _client = client ?? Supabase.instance.client;
 
@@ -60,9 +50,6 @@ class FaceProfileRepository {
     return FaceProfileStatus.fromRow(rows.first as Map<String, dynamic>);
   }
 
-  /// URL sementara (kedaluwarsa dalam [expiresInSeconds]) untuk preview foto
-  /// wajah sendiri - bucket `face-photos` privat, jadi tidak bisa dipakai
-  /// sebagai URL publik permanen.
   Future<String> photoSignedUrl(String photoPath, {int expiresInSeconds = 3600}) {
     return _client.storage.from('face-photos').createSignedUrl(photoPath, expiresInSeconds);
   }

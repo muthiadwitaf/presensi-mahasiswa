@@ -1,7 +1,3 @@
-// Admin creates a provisioned-account entry (username + role decided server
-// side) and an activation code. The student/lecturer later calls
-// activate-account with that code to set their own password — they never
-// choose their own role.
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { requireUser, serviceClient } from "../_shared/clients.ts";
 

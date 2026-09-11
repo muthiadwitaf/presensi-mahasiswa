@@ -1,24 +1,20 @@
-/// Satu baris hasil RPC `app.my_sessions_on`/`app.my_taught_sessions_on` -
-/// gabungan jadwal template + meeting session aktual + (untuk mahasiswa)
-/// status presensinya sendiri kalau sudah ada. Sengaja TIDAK memuat field
-/// mentah embedding/score apa pun - ini murni untuk ditampilkan di UI.
 class SessionToday {
-  final DateTime? sessionDate; // hanya terisi dari my_sessions_between (jadwal mingguan)
-  final String sessionSource; // 'SESSION' (sudah materialize) atau 'SCHEDULE' (masih template)
-  final String? meetingSessionId; // null kalau sessionSource == 'SCHEDULE'
+  final DateTime? sessionDate;
+  final String sessionSource;
+  final String? meetingSessionId;
   final String courseClassId;
   final String courseCode;
   final String courseName;
   final String? lecturerName;
-  final String startTime; // "HH:mm:ss" dari Postgres time
+  final String startTime;
   final String endTime;
-  final String mode; // ONLINE/OFFLINE/HYBRID
+  final String mode;
   final String? locationName;
   final String? meetingUrl;
-  final String sessionStatus; // SCHEDULED/OPEN/ONGOING/CLOSED/CANCELLED/RESCHEDULED
+  final String sessionStatus;
 
   final String? attendanceId;
-  final String? attendanceStatus; // HADIR/TERLAMBAT/IZIN/SAKIT/ALPA/DITOLAK
+  final String? attendanceStatus;
   final DateTime? checkInAt;
   final DateTime? checkOutAt;
   final int? minutesLate;
@@ -56,10 +52,6 @@ class SessionToday {
   String get startTimeLabel => _hhmm(startTime);
   String get endTimeLabel => _hhmm(endTime);
 
-  /// Apakah sesi ini (hari ini) sedang berada dalam jendela waktu jam
-  /// mulai-selesainya. Jendela buka/tutup presensi yang sesungguhnya
-  /// (checkin_opens_at/closes_at) dihitung server-side saat submit-attendance
-  /// - ini cuma dipakai untuk kondisi tampilan UI (mis. aktifkan tombol).
   bool isActiveNow() {
     if (isCancelled) return false;
     final now = DateTime.now();

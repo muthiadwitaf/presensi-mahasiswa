@@ -1,18 +1,5 @@
--- =============================================================================
--- Fitur koordinator kelas: input KRS & KHS mahasiswa di prodinya, dan info
--- meeting session (bukan reschedule/batal - itu tetap wewenang dosen) untuk
--- kelas yang diizinkan admin (data-driven lewat class_groups flag, BUKAN
--- hardcode "reguler malam"/"ekstensi" di kode - sesuai prinsip di seluruh
--- spec: jangan hardcode struktur akademik).
--- =============================================================================
-
--- ---------------------------------------------------------------------------
--- KRS: tandai pengulangan matkul (satu-satunya pengecualian aturan semester)
--- dan validasi server-side bahwa matkul yang diambil memang matkul semester
--- berjalan mahasiswa, kecuali is_retake.
--- ---------------------------------------------------------------------------
 alter table enrollments add column is_retake boolean not null default false;
--- Nilai terstruktur untuk KHS (huruf sudah ada di final_grade, tambah bobot).
+
 alter table enrollments add column grade_point numeric(3,2) check (grade_point between 0 and 4);
 
 create or replace function app.guard_enrollment_semester()
@@ -42,25 +29,18 @@ create trigger enrollments_guard_semester_trg
   before insert on enrollments
   for each row execute function app.guard_enrollment_semester();
 
--- Koordinator input KRS untuk mahasiswa di class_group-nya sendiri saja.
 grant insert, update on enrollments to authenticated;
 
 create policy enr_write_coordinator on enrollments for all to authenticated
   using (app.is_coordinator_of((select s.class_group_id from students s where s.id = enrollments.student_id)))
   with check (app.is_coordinator_of((select s.class_group_id from students s where s.id = enrollments.student_id)));
 
--- ---------------------------------------------------------------------------
--- KHS: dokumen resmi (link Drive, sudah ditandatangani Kepala Biro Akademik
--- & Administrasi) per mahasiswa per semester. Nilai per mata kuliah tetap
--- di enrollments.final_grade/grade_point - dokumen ini cuma metadata +
--- pointer ke Drive tempat mahasiswa unduh KHS resminya.
--- ---------------------------------------------------------------------------
 create table khs_documents (
   id uuid primary key default gen_random_uuid(),
   student_id uuid not null references students(id) on delete cascade,
   academic_term_id uuid not null references academic_terms(id) on delete restrict,
   drive_link text not null,
-  signed_by text not null, -- nama Kepala Biro Akademik & Administrasi
+  signed_by text not null,
   status text not null default 'DISTRIBUTED' check (status in ('DRAFT', 'DISTRIBUTED')),
   uploaded_by uuid references users(id),
   created_at timestamptz not null default now(),
@@ -86,12 +66,6 @@ create policy khs_write_coordinator on khs_documents for all to authenticated
 create policy khs_write_admin on khs_documents for all to authenticated
   using (app.is_admin()) with check (app.is_admin());
 
--- ---------------------------------------------------------------------------
--- Info meeting session oleh koordinator - hanya utk class_group yang
--- diizinkan admin (data-driven, bukan hardcode nama kelas). Koordinator
--- TIDAK bisa reschedule/batal - itu tetap lewat meeting_sessions yang cuma
--- boleh diubah dosen/admin (RLS existing di 0013 tidak diubah di sini).
--- ---------------------------------------------------------------------------
 alter table class_groups add column allow_coordinator_session_notice boolean not null default false;
 
 create table session_notices (

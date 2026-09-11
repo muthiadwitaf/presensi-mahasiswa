@@ -1,4 +1,3 @@
--- Recurring weekly template. Answers: "normally, when does this class meet?"
 create table schedules (
   id              uuid primary key default gen_random_uuid(),
   course_class_id uuid not null references course_classes(id) on delete cascade,
@@ -25,7 +24,6 @@ create index schedules_course_class_idx on schedules(course_class_id);
 create index schedules_day_idx          on schedules(day_of_week) where is_active;
 create index schedules_location_idx     on schedules(location_id);
 
--- The actual dated occurrence. SOURCE OF TRUTH for a given date.
 create table meeting_sessions (
   id                    uuid primary key default gen_random_uuid(),
   course_class_id       uuid not null references course_classes(id) on delete cascade,
@@ -88,8 +86,6 @@ create unique index meeting_sessions_regular_unique_idx
   on meeting_sessions(course_class_id, session_date, start_time)
   where session_type = 'REGULAR' and status <> 'CANCELLED';
 
--- Derive starts_at/ends_at using app_settings.campus_timezone (trigger, not a
--- generated column, so the timezone stays config-driven rather than hardcoded).
 create or replace function app.meeting_sessions_set_instants() returns trigger
 language plpgsql as $$
 declare v_tz text;
@@ -103,7 +99,6 @@ create trigger meeting_sessions_set_instants_trg
   before insert or update of session_date, start_time, end_time on meeting_sessions
   for each row execute function app.meeting_sessions_set_instants();
 
--- Resolver: SESSION overrides SCHEDULE for any given date.
 create or replace function app.resolve_class_days(
   p_course_class_id uuid, p_from date, p_to date
 ) returns table (
@@ -144,7 +139,6 @@ create or replace function app.resolve_class_days(
   where not exists (select 1 from sessions x where x.the_date = e.the_date);
 $$;
 
--- Idempotently materialize a REGULAR session for a template-derived date.
 create or replace function app.ensure_session_for(
   p_course_class_id uuid, p_date date
 ) returns uuid
@@ -182,7 +176,6 @@ begin
   return v_id;
 end $$;
 
--- Geofence resolution: session location -> ancestor with coords -> app_settings default.
 create or replace function app.resolve_geofence(p_location_id uuid)
 returns table(lat double precision, lng double precision, radius_m integer, enforced boolean, source text)
 language plpgsql stable as $$

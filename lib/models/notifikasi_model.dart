@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class NotifikasiModel {
   final String id;
   final String judul;
@@ -15,22 +13,13 @@ class NotifikasiModel {
     required this.createdAt,
   });
 
-  factory NotifikasiModel.fromMap(String id, Map<String, dynamic> map) {
+  factory NotifikasiModel.fromRow(Map<String, dynamic> row) {
     return NotifikasiModel(
-      id: id,
-      judul: map['judul'] as String? ?? '',
-      isi: map['isi'] as String? ?? '',
-      createdByNama: map['createdByNama'] as String? ?? '',
-      createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      id: row['id'] as String,
+      judul: row['title'] as String? ?? '',
+      isi: row['body'] as String? ?? '',
+      createdByNama: row['created_by_name'] as String? ?? '',
+      createdAt: DateTime.parse(row['created_at'] as String),
     );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'judul': judul,
-      'isi': isi,
-      'createdByNama': createdByNama,
-      'createdAt': Timestamp.fromDate(createdAt),
-    };
   }
 }

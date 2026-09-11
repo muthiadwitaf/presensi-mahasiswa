@@ -8,12 +8,6 @@ import 'package:tflite_flutter/tflite_flutter.dart';
 
 import '../utils/face_crop_util.dart';
 
-/// Pencocokan identitas wajah (Opsi A): ubah foto wajah jadi embedding
-/// 192-dimensi pakai MobileFaceNet (.tflite), untuk dibandingkan dengan
-/// embedding wajah yang didaftarkan mahasiswa - lihat `FaceMatching` untuk
-/// perhitungan jaraknya. Model & skema preprocessing (`(pixel-128)/128`)
-/// mengikuti reference implementation Flutter MCarlomagno/FaceRecognitionAuth
-/// (BSD-3-Clause) - lihat README untuk sumber & detail lisensi.
 class FaceEmbeddingService {
   static const modelAssetPath = 'assets/models/mobilefacenet.tflite';
   static const inputSize = 112;
@@ -32,7 +26,6 @@ class FaceEmbeddingService {
     _interpreter = await Interpreter.fromAsset(modelAssetPath, options: options);
   }
 
-  /// Dipakai saat presensi (frame kamera live).
   List<double> embedFromCameraImage({
     required CameraImage cameraImage,
     required Rect boundingBox,
@@ -47,8 +40,6 @@ class FaceEmbeddingService {
     return _runEmbedding(face);
   }
 
-  /// Dipakai saat pendaftaran wajah (foto still hasil kamera, bukan stream).
-  /// Return null kalau tidak ada wajah terdeteksi di foto.
   Future<List<double>?> embedFromFile(File file) async {
     final inputImage = InputImage.fromFilePath(file.path);
     final faces = await _fileFaceDetector.processImage(inputImage);

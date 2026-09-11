@@ -2,12 +2,6 @@ import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 
-/// Konversi buffer NV21 (Y plane + interleaved VU plane, format yang diminta
-/// dari `camera` package lewat `ImageFormatGroup.nv21` khusus supaya
-/// kompatibel langsung dengan Google ML Kit di Android) menjadi `img.Image`
-/// RGB, supaya bisa di-crop & resize sebelum masuk ke TFLite.
-///
-/// Rumus konversi YUV->RGB standar AOSP (BT.601, full range).
 img.Image nv21ToImage(Uint8List nv21, int width, int height) {
   final image = img.Image(width: width, height: height);
   final frameSize = width * height;

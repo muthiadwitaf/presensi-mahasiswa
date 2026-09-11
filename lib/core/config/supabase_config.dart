@@ -1,8 +1,3 @@
-/// Kredensial Supabase, wajib disuplai lewat --dart-define-from-file
-/// (lihat env/dev.json) - jangan pernah di-hardcode di sini.
-///
-/// Jalankan aplikasi dengan:
-///   flutter run --dart-define-from-file=env/dev.json
 class SupabaseConfig {
   SupabaseConfig._();
 

@@ -1,5 +1,3 @@
-/// Kumpulan string UI berbahasa Indonesia dipakai lintas fitur, supaya
-/// konsisten dan gampang direvisi di satu tempat.
 class AppStrings {
   AppStrings._();
 

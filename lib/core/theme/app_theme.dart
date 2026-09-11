@@ -1,31 +1,26 @@
 import 'package:flutter/material.dart';
 
-/// Palet warna resmi app (ditentukan user) - jaga konsisten, jangan pakai
-/// warna ad-hoc di luar token-token ini.
 class AppTheme {
   AppTheme._();
 
-  static const Color primary = Color(0xFF1E3A8A); // Deep Navy
-  static const Color secondary = Color(0xFF2563EB); // Blue
-  static const Color accent = Color(0xFF14B8A6); // Teal
-  static const Color background = Color(0xFFF8FAFC); // Soft Gray
+  static const Color primary = Color(0xFF1E3A8A);
+  static const Color secondary = Color(0xFF2563EB);
+  static const Color accent = Color(0xFFF59E0B);
+  static const Color background = Color(0xFFF8FAFC);
   static const Color card = Color(0xFFFFFFFF);
-  static const Color textPrimary = Color(0xFF0F172A); // Slate
-  static const Color textSecondary = Color(0xFF64748B); // Gray
+  static const Color textPrimary = Color(0xFF0F172A);
+  static const Color textSecondary = Color(0xFF64748B);
 
   static const Color success = Color(0xFF22C55E);
   static const Color warning = Color(0xFFF59E0B);
   static const Color danger = Color(0xFFEF4444);
 
-  /// Gradien brand (navy → blue) - dipakai untuk header/aksen yang butuh
-  /// tampilan lebih "hidup" (mis. header drawer, logo di layar login).
   static const LinearGradient brandGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [primary, secondary],
   );
 
-  /// Gradien latar untuk layar login/register.
   static const LinearGradient authBackgroundGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,

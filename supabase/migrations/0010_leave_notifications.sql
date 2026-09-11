@@ -1,4 +1,3 @@
--- Replaces `izin`.
 create table leave_requests (
   id                 uuid primary key default gen_random_uuid(),
   student_id         uuid not null references students(id) on delete cascade,
@@ -27,7 +26,6 @@ create index leave_class_idx   on leave_requests(course_class_id);
 alter table attendance_records add constraint attendance_leave_fk
   foreign key (leave_request_id) references leave_requests(id) on delete set null;
 
--- Approving an izin upserts the authoritative attendance_records row.
 create or replace function app.leave_requests_apply_attendance() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare v_enrollment_id uuid; v_course_class_id uuid; v_status public.attendance_status;

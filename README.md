@@ -20,8 +20,8 @@ Muhammadiyah Jakarta"*.
 > 2. **Validasi geofencing DIHAPUS.** Judul skripsi & KF-04 proposal
 >    menyebut "geofencing" sebagai validasi radius lokasi ruang kelas. Atas
 >    keputusan Anda, app ini TIDAK LAGI memvalidasi radius — lokasi live
->    hanya direkam sebagai log saat Clock In/Out (field `clockInLat/Lng`,
->    `clockOutLat/Lng` di Firestore), bukan syarat lolos/gagal presensi.
+>    hanya direkam sebagai log saat Clock In/Out (kolom lokasi di
+>    `attendance_verifications`), bukan syarat lolos/gagal presensi.
 >    Ini kemungkinan perlu direvisi paling hati-hati karena "Geofencing"
 >    ada di JUDUL skripsi Anda — pertimbangkan apakah judul juga perlu
 >    disesuaikan atau geofencing tetap disebut sebagai "pencatatan lokasi"
@@ -34,11 +34,11 @@ Muhammadiyah Jakarta"*.
 
 - Seluruh kode app (Flutter) sudah lengkap: semua menu (Beranda, Jadwal,
   Rekap, Wajah Terdaftar, Izin/Sakit, Kelola Kelas untuk dosen, Notifikasi)
-  terhubung ke Firestore, `flutter analyze` bersih.
-- **Firebase BELUM dikonfigurasi ke project sungguhan** — `lib/firebase_options.dart`
-  masih placeholder. APK bisa dibuild & UI bisa dijalankan, tapi
-  login/register/semua fitur berbasis data akan gagal sampai langkah di
-  bawah dijalankan.
+  terhubung ke Supabase (PostgreSQL + Auth + Storage + Edge Functions),
+  `flutter analyze` bersih.
+- **Firebase sudah sepenuhnya dihapus** dari project ini (auth, Firestore,
+  dependency, konfigurasi Android) - backend sekarang murni Supabase, lihat
+  skema di `supabase/migrations/`.
 - Model `assets/models/model.tflite` (liveness, MobileNetV2) SUDAH ada —
   **wajib dikalibrasi** sebelum dipakai untuk pengujian/sidang, lihat bagian
   "Model Liveness" di bawah.
@@ -46,40 +46,45 @@ Muhammadiyah Jakarta"*.
   SUDAH ada — lihat bagian "Model Face Recognition" di bawah untuk detail &
   catatan kalibrasi threshold-nya.
 
-## 1. Setup Firebase (WAJIB sebelum app bisa dipakai penuh)
+## 1. Setup Supabase (WAJIB sebelum app bisa dipakai penuh)
 
-Saya tidak bisa membuat project Firebase atas nama Anda (butuh login akun
-Google Anda sendiri). Langkahnya:
+1. Buat project di [supabase.com](https://supabase.com) (atau jalankan
+   Supabase lokal lewat Supabase CLI: `supabase start`).
+2. Terapkan skema database: `supabase db push` (menjalankan seluruh file di
+   `supabase/migrations/` secara berurutan), lalu (opsional) `supabase db
+   seed` untuk data contoh (`supabase/seed.sql`).
+3. Deploy Edge Functions yang dipakai app: `supabase functions deploy` untuk
+   tiap fungsi di `supabase/functions/` (`activate-account`,
+   `admin-provision-user`, `attendance-challenge`, `enroll-face`,
+   `submit-attendance`, `submit-checkout`).
+4. Di **Authentication → Providers → Email**, matikan **"Confirm email"** -
+   app memakai email sintetis (`<NIM>@smartattendance.app`, lihat
+   `lib/core/services/supabase_auth_service.dart`) yang tidak pernah bisa
+   menerima email konfirmasi sungguhan.
+5. Isi `env/dev.json` dengan `SUPABASE_URL` & `SUPABASE_ANON_KEY` project
+   Anda, lalu jalankan app dengan:
 
-```bash
-dart pub global activate flutterfire_cli
-flutterfire configure
-```
+   ```bash
+   flutter run --dart-define-from-file=env/dev.json
+   ```
 
-Ikuti prompt-nya: login akun Google, pilih/buat project Firebase baru, pilih
-platform Android saja. Perintah ini akan menimpa `lib/firebase_options.dart`
-dan membuat `android/app/google-services.json` otomatis.
+   (Run configuration `main.dart` di Android Studio/.idea sudah diset untuk
+   otomatis menyertakan argumen ini.)
 
-Setelah itu, di Firebase Console:
-- **Authentication** → Sign-in method → aktifkan **Email/Password** (dipakai
-  di balik layar untuk login NIM, lihat `lib/core/services/auth_service.dart`).
-- **Firestore Database** → buat database (mode production/test terserah,
-  untuk demo skripsi mode test lebih praktis).
-
-Catatan: app ini **tidak pakai Firebase Storage** (Firebase sekarang
-mensyaratkan upgrade ke paket Blaze + kartu debit/kredit untuk pakai
-Storage). Foto wajah terdaftar & lampiran bukti izin/sakit disimpan sebagai
-Base64 terkompresi langsung di dokumen Firestore — lihat
-`lib/core/utils/image_compression.dart`. Konsekuensinya resolusi foto lebih
-rendah (di-resize maks. 800px, dikompres di bawah ±500KB), tapi cukup untuk
-keperluan peninjauan manual, dan tidak perlu kartu pembayaran sama sekali.
+Foto wajah terdaftar disimpan di bucket Storage privat `face-photos` (lewat
+Edge Function `enroll-face`, embedding-nya di tabel `face_profiles` yang
+tidak bisa dibaca langsung oleh client), dan lampiran bukti izin/sakit di
+bucket `leave-attachments`. Tidak ada lagi penyimpanan Base64 di dokumen
+database seperti versi Firestore dulu.
 
 ### Data awal
 
-Belum ada integrasi SIAKAD, jadi data matkul/ruang/jadwal diisi manual lewat
-app: daftar sebagai **dosen** (menu Daftar di halaman login, pilih role
-Dosen), lalu buka menu **Kelola Kelas → Kelola Jadwal** untuk menambah Mata
-Kuliah, Ruang (nama + gedung saja, tanpa koordinat), dan Jadwal.
+Belum ada integrasi SIAKAD. Data akademik (fakultas/prodi/mata kuliah/kelas/
+jadwal) dikelola lewat SQL langsung (lihat `supabase/seed_prodi_2026.sql`
+sebagai contoh) atau Web Admin terpisah - **bukan lagi lewat mobile app**,
+menu "Kelola Jadwal" di app sudah dihapus. Akun mahasiswa/dosen didaftarkan
+sendiri lewat layar Daftar (role dipilih manual saat registrasi), atau
+diprovisioning admin lewat Edge Function `admin-provision-user`.
 
 ## 2. Model Liveness (MobileNetV2 real/spoof)
 
@@ -156,9 +161,12 @@ adb emu geo fix <longitude> <latitude>
 
 - `lib/core/` — services (auth, lokasi live, face detection ML Kit, liveness
   TFLite, face embedding/matching TFLite) & utils (konversi NV21→RGB, crop
-  wajah bersama, kompresi foto Base64) & repository Firestore per koleksi.
-- `lib/models/` — model data (`UserModel`, `JadwalModel`, `RuangModel`,
-  `PresensiModel`, `IzinModel`, `NotifikasiModel`).
+  wajah bersama) & repository Supabase per tabel/fitur.
+- `lib/models/` — model data (`UserModel`, `SessionTodayModel`, `IzinModel`,
+  `NotifikasiModel`).
+- `supabase/migrations/` — skema database (tabel, enum, RLS, trigger, RPC).
+- `supabase/functions/` — Edge Functions (logika server-side sensitif seperti
+  keputusan presensi & pendaftaran wajah).
 - `lib/providers/` — state management (`provider` package).
 - `lib/features/` — satu folder per menu/fitur.
 - `scripts/calibrate_model.py` — kalibrasi model liveness (lihat di atas).
@@ -167,9 +175,9 @@ adb emu geo fix <longitude> <latitude>
 
 - Training model dari nol / dataset asli kampus — bisa ditambahkan belakangan
   kalau butuh, tapi sesuai kesepakatan awal, sesi ini pakai model pretrained.
-- Push notification OS-level (FCM) — menu Notifikasi hanya daftar pengumuman
-  dari Firestore, tanpa push ke luar app.
-- Integrasi SIAKAD nyata — jadwal/matkul dikelola manual lewat menu Kelola
-  Jadwal (role dosen).
+- Push notification OS-level (FCM/APNs) — menu Notifikasi hanya daftar
+  pengumuman dari tabel `notifications`, tanpa push ke luar app.
+- Integrasi SIAKAD nyata — data akademik dikelola manual lewat SQL/Web Admin
+  terpisah, bukan lewat mobile app.
 - Provisioning akun produksi oleh admin — untuk demo, akun mahasiswa/dosen
   didaftarkan sendiri lewat layar Daftar (role dipilih manual saat registrasi).

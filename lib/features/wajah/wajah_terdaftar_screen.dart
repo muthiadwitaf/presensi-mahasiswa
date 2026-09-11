@@ -8,13 +8,6 @@ import '../../core/repositories/face_profile_repository.dart';
 import '../../core/services/face_embedding_service.dart';
 import '../../core/theme/app_theme.dart';
 
-/// Pendaftaran wajah lewat Edge Function `enroll-face` - embedding dihitung
-/// on-device (MobileFaceNet) lalu dikirim ke server, TIDAK pernah disimpan
-/// lokal atau dibaca balik oleh client (RLS `face_profiles` tidak memberi
-/// mahasiswa akses baca sama sekali ke tabel itu, bahkan untuk baris
-/// miliknya sendiri - lihat `FaceProfileRepository`). Karena itu layar ini
-/// tidak bisa menampilkan preview foto yang sudah terdaftar, hanya status
-/// (terdaftar/belum + kapan terakhir diperbarui).
 class WajahTerdaftarScreen extends StatefulWidget {
   const WajahTerdaftarScreen({super.key});
 
@@ -42,7 +35,13 @@ class _WajahTerdaftarScreenState extends State<WajahTerdaftarScreen> {
 
   Future<void> _ambilFoto() async {
     final picker = ImagePicker();
-    final xfile = await picker.pickImage(source: ImageSource.camera, preferredCameraDevice: CameraDevice.front);
+
+    final xfile = await picker.pickImage(
+      source: ImageSource.camera,
+      preferredCameraDevice: CameraDevice.front,
+      maxWidth: 1024,
+      imageQuality: 75,
+    );
     if (xfile == null) return;
 
     setState(() => _busy = true);
@@ -65,9 +64,7 @@ class _WajahTerdaftarScreenState extends State<WajahTerdaftarScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Foto wajah berhasil didaftarkan')));
         setState(() => _statusFuture = _faceProfileRepo.status());
-        // Kalau layar ini dibuka lewat pintasan dari Beranda (bukan tab
-        // drawer), otomatis kembali supaya alurnya tidak jadi jalan buntu -
-        // mahasiswa langsung bisa lanjut presensi.
+
         await Future.delayed(const Duration(milliseconds: 600));
         if (mounted) Navigator.of(context).maybePop();
       }

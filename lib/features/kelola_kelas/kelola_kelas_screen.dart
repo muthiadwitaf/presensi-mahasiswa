@@ -3,16 +3,12 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/repositories/attendance_repository.dart';
-import '../../core/utils/image_compression.dart';
 import '../../models/izin_model.dart';
 import '../../models/session_today_model.dart';
 import '../../providers/izin_provider.dart';
 import '../../providers/jadwal_provider.dart';
 import '../../widgets/empty_state.dart';
 
-/// "Kelola Jadwal" (CRUD matkul/ruang/jadwal manual) sudah dihapus dari
-/// mobile - sesuai keputusan migrasi, administrasi akademik (termasuk
-/// jadwal) sekarang wewenang Web Admin terpisah, bukan aplikasi dosen.
 class KelolaKelasScreen extends StatelessWidget {
   const KelolaKelasScreen({super.key});
 
@@ -131,71 +127,96 @@ class _DaftarHadirTabState extends State<_DaftarHadirTab> {
   }
 }
 
-class _PersetujuanIzinTab extends StatelessWidget {
+class _PersetujuanIzinTab extends StatefulWidget {
   const _PersetujuanIzinTab();
+
+  @override
+  State<_PersetujuanIzinTab> createState() => _PersetujuanIzinTabState();
+}
+
+class _PersetujuanIzinTabState extends State<_PersetujuanIzinTab> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => context.read<IzinProvider>().refreshPending());
+  }
 
   @override
   Widget build(BuildContext context) {
     final izinProvider = context.watch<IzinProvider>();
-    return StreamBuilder<List<IzinModel>>(
-      stream: izinProvider.watchPending(),
-      builder: (context, snapshot) {
-        final list = snapshot.data ?? [];
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        if (list.isEmpty) {
-          return const EmptyState(message: 'Tidak ada pengajuan izin yang menunggu persetujuan', icon: Icons.mark_email_read_outlined);
-        }
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: list.length,
-          itemBuilder: (context, i) {
-            final izin = list[i];
-            return Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('${izin.mahasiswaNama} (${izin.mahasiswaNim})', style: const TextStyle(fontWeight: FontWeight.w700)),
-                    Text('${izin.matkulNama} • ${DateFormat('d MMM y', 'id_ID').format(izin.tanggal)}'),
-                    const SizedBox(height: 6),
-                    Text(izin.alasan),
-                    if (izin.buktiBase64 != null) ...[
-                      const SizedBox(height: 8),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.memory(
-                          ImageCompression.decode(izin.buktiBase64!),
-                          height: 140,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 10),
-                    Row(
+    final list = izinProvider.pending;
+
+    if (izinProvider.isLoading && list.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return RefreshIndicator(
+      onRefresh: izinProvider.refreshPending,
+      child: list.isEmpty
+          ? ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: const [
+                EmptyState(message: 'Tidak ada pengajuan izin yang menunggu persetujuan', icon: Icons.mark_email_read_outlined),
+              ],
+            )
+          : ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              itemCount: list.length,
+              itemBuilder: (context, i) {
+                final izin = list[i];
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => context.read<IzinProvider>().putuskan(izin.id, StatusIzin.ditolak),
-                            child: const Text('Tolak'),
+                        Text('${izin.mahasiswaNama} (${izin.mahasiswaNim})', style: const TextStyle(fontWeight: FontWeight.w700)),
+                        Text('${izin.matkulNama} • ${DateFormat('d MMM y', 'id_ID').format(izin.tanggal)}'),
+                        const SizedBox(height: 6),
+                        Text(izin.alasan),
+                        if (izin.attachmentPath != null) ...[
+                          const SizedBox(height: 8),
+                          FutureBuilder<String>(
+                            future: izinProvider.attachmentSignedUrl(izin.attachmentPath!),
+                            builder: (context, snap) {
+                              if (!snap.hasData) {
+                                return const SizedBox(
+                                  height: 32,
+                                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                );
+                              }
+                              return ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(snap.data!, height: 140, fit: BoxFit.cover),
+                              );
+                            },
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: FilledButton(
-                            onPressed: () => context.read<IzinProvider>().putuskan(izin.id, StatusIzin.disetujui),
-                            child: const Text('Setujui'),
-                          ),
+                        ],
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => context.read<IzinProvider>().putuskan(izin.id, StatusIzin.ditolak),
+                                child: const Text('Tolak'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: () => context.read<IzinProvider>().putuskan(izin.id, StatusIzin.disetujui),
+                                child: const Text('Setujui'),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+                  ),
+                );
+              },
+            ),
     );
   }
 }

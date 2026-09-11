@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
 
-import '../../core/repositories/presensi_repository.dart';
-import '../../models/presensi_model.dart';
-import '../../providers/auth_provider.dart';
+import '../../core/repositories/attendance_repository.dart';
 import '../../widgets/empty_state.dart';
 
 class _RekapMatkul {
@@ -13,18 +10,32 @@ class _RekapMatkul {
   double get persentase => total == 0 ? 0 : hadir / total * 100;
 }
 
-class RekapScreen extends StatelessWidget {
-  RekapScreen({super.key});
+class RekapScreen extends StatefulWidget {
+  const RekapScreen({super.key});
 
-  final _repo = PresensiRepository();
+  @override
+  State<RekapScreen> createState() => _RekapScreenState();
+}
+
+class _RekapScreenState extends State<RekapScreen> {
+  final _repo = AttendanceRepository();
+  late final Future<List<Map<String, dynamic>>> _future = _repo.myAttendanceHistory();
+
+  static String _courseName(Map<String, dynamic> log) {
+    final courseClass = log['course_classes'] as Map<String, dynamic>?;
+    final course = courseClass?['courses'] as Map<String, dynamic>?;
+    return course?['name'] as String? ?? '-';
+  }
+
+  static bool _hadir(Map<String, dynamic> log) {
+    final status = log['status'] as String?;
+    return status == 'HADIR' || status == 'TERLAMBAT';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final uid = context.watch<AuthProvider>().currentUser?.uid;
-    if (uid == null) return const SizedBox.shrink();
-
-    return StreamBuilder<List<PresensiModel>>(
-      stream: _repo.watchByMahasiswa(uid),
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _future,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -39,9 +50,9 @@ class RekapScreen extends StatelessWidget {
 
         final Map<String, _RekapMatkul> perMatkul = {};
         for (final log in logs) {
-          final r = perMatkul.putIfAbsent(log.matkulNama, () => _RekapMatkul());
+          final r = perMatkul.putIfAbsent(_courseName(log), () => _RekapMatkul());
           r.total++;
-          if (log.statusAkhir == StatusAkhir.hadir) r.hadir++;
+          if (_hadir(log)) r.hadir++;
         }
 
         return ListView(
@@ -82,16 +93,20 @@ class RekapScreen extends StatelessWidget {
             const SizedBox(height: 20),
             Text('Riwayat Terbaru', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            ...logs.take(10).map((log) => Card(
-                  child: ListTile(
-                    leading: Icon(
-                      log.statusAkhir == StatusAkhir.hadir ? Icons.check_circle : Icons.cancel,
-                      color: log.statusAkhir == StatusAkhir.hadir ? Colors.green : Colors.red,
-                    ),
-                    title: Text(log.matkulNama),
-                    subtitle: Text(DateFormat('EEEE, d MMM y • HH:mm', 'id_ID').format(log.timestamp)),
+            ...logs.take(10).map((log) {
+              final berhasil = _hadir(log);
+              final checkIn = log['check_in_at'] != null ? DateTime.parse(log['check_in_at'] as String) : null;
+              return Card(
+                child: ListTile(
+                  leading: Icon(
+                    berhasil ? Icons.check_circle : Icons.cancel,
+                    color: berhasil ? Colors.green : Colors.red,
                   ),
-                )),
+                  title: Text(_courseName(log)),
+                  subtitle: Text(checkIn != null ? DateFormat('EEEE, d MMM y • HH:mm', 'id_ID').format(checkIn) : '-'),
+                ),
+              );
+            }),
           ],
         );
       },

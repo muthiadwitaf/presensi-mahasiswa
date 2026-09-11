@@ -22,9 +22,6 @@ class AuthProvider extends ChangeNotifier {
   String? errorMessage;
   bool isBusy = false;
 
-  /// Sesi Supabase bisa saja sudah ada (dari penyimpanan lokal) sebelum
-  /// listener `onAuthStateChange` pertama kali terpanggil - tanpa ini,
-  /// status akan nyangkut di [AuthStatus.unknown] pada cold start.
   Future<void> _bootstrap() async {
     final user = _authService.currentAuthUser;
     if (user == null) {
@@ -51,9 +48,7 @@ class AuthProvider extends ChangeNotifier {
       currentUser = await _authService.fetchProfile(userId);
       status = AuthStatus.loggedIn;
     } catch (_) {
-      // Auth berhasil tapi profil di tabel `users` tidak ditemukan/terbaca
-      // (mis. RLS, atau baris belum sempat dibuat trigger) - jangan
-      // anggap loggedIn tanpa profil yang valid.
+
       status = AuthStatus.loggedOut;
       currentUser = null;
     }
@@ -80,9 +75,6 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Mengaktifkan akun yang sudah diprovisioning admin, lalu langsung login.
-  /// Menggantikan `register()` lama - tidak ada parameter role di sini
-  /// secara sengaja, lihat `SupabaseAuthService.activateAccount`.
   Future<bool> activateAccount({
     required String nim,
     required String activationCode,
@@ -107,8 +99,6 @@ class AuthProvider extends ChangeNotifier {
     return login(nim: nim, password: password);
   }
 
-  /// Registrasi mandiri, role dipilih pengguna sendiri (mahasiswa/dosen) -
-  /// lihat catatan keamanan di `SupabaseAuthService.register`.
   Future<bool> register({
     required String nim,
     required String nama,

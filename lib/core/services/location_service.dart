@@ -1,7 +1,5 @@
 import 'package:geolocator/geolocator.dart';
 
-/// Menyediakan lokasi live perangkat - direkam sebagai bagian dari log
-/// presensi (Clock In/Out), tanpa validasi radius geofence.
 class LocationService {
   Future<void> ensurePermission() async {
     var permission = await Geolocator.checkPermission();

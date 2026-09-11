@@ -5,10 +5,6 @@ import 'package:image/image.dart' as img;
 
 import 'nv21_converter.dart';
 
-/// Crop wajah dari frame kamera (NV21) sesuai bounding box hasil ML Kit,
-/// lalu resize ke [targetSize] persegi — dipakai bersama oleh
-/// `LivenessService` (input MobileNetV2) dan `FaceEmbeddingService` (input
-/// MobileFaceNet), supaya logika rotasi/crop tidak dobel-tulis & konsisten.
 img.Image cropFaceFromCameraImage({
   required CameraImage cameraImage,
   required Rect boundingBox,

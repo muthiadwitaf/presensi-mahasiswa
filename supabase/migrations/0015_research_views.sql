@@ -1,7 +1,3 @@
--- Research/experiment metrics. RLS on the underlying attendance_verifications
--- table still applies to whoever queries these views (admin sees everything,
--- a lecturer/student sees only what their row-level policies already allow).
-
 create view research_antispoof_confusion as
 select experiment_tag,
        count(*) filter (where ground_truth_label='GENUINE' and anti_spoof_passed) as true_positive,
@@ -31,7 +27,6 @@ group by course_class_id, failure_stage, outcome;
 grant select on research_antispoof_confusion, research_face_similarity_distribution, research_failure_breakdown
   to authenticated;
 
--- Non-biometric face-profile status for the profile screen: never exposes the embedding.
 create or replace function app.my_face_profile_status()
 returns table(has_profile boolean, enrolled_at timestamptz, updated_at timestamptz, quality_score real, version integer)
 language sql stable security definer set search_path = '' as $$
@@ -42,7 +37,6 @@ $$;
 revoke execute on function app.my_face_profile_status() from public, anon;
 grant execute on function app.my_face_profile_status() to authenticated;
 
--- Notification list, heavy targeting logic centralized here instead of a hot-path RLS query.
 create or replace function app.my_notifications(p_limit integer default 30, p_offset integer default 0)
 returns setof notifications
 language sql stable security definer set search_path = '' as $$

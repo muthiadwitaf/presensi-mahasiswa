@@ -19,7 +19,6 @@ create index enrollments_term_idx         on enrollments(academic_term_id);
 create index enrollments_active_idx
   on enrollments(student_id, course_class_id) where status = 'ACTIVE';
 
--- Keep academic_term_id consistent with the enrolled course_class.
 create or replace function app.enrollments_sync_term() returns trigger
 language plpgsql as $$
 begin

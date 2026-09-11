@@ -1,5 +1,3 @@
-// Issues a one-shot, short-TTL nonce bound to (student, meeting_session) right
-// before the camera opens on the client. Consumed by submit-attendance.
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { requireUser, serviceClient } from "../_shared/clients.ts";
 

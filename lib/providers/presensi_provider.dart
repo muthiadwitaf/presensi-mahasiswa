@@ -13,13 +13,6 @@ import '../models/session_today_model.dart';
 
 enum CekStatus { belum, mengecek, valid, invalid }
 
-/// Mengorkestrasi alur inti presensi di device: deteksi wajah + klasifikasi
-/// liveness + hitung embedding (semua on-device, throttled per frame lewat
-/// `_isProcessingFrame`). Keputusan HADIR/valid/tidak TIDAK dibuat di sini -
-/// hasil klasifikasi lokal cuma dikirim sebagai evidence ke Edge Function
-/// `submit-attendance`, yang jadi satu-satunya penentu status (lihat
-/// `AttendanceRepository`). Provider ini cuma menerjemahkan respons server
-/// ke state UI.
 class PresensiProvider extends ChangeNotifier {
   PresensiProvider({
     LocationService? locationService,
@@ -80,10 +73,6 @@ class PresensiProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Rekam lokasi live perangkat untuk dikirim sebagai evidence ke server -
-  /// gagal diam-diam kalau lokasi tidak tersedia (server yang memutuskan
-  /// apakah lokasi wajib untuk sesi ini, lihat FAIL_MODE_MISMATCH/
-  /// FAIL_GEOFENCE di `submit-attendance`).
   Future<void> catatLokasiSaatIni() async {
     try {
       _position = await _locationService.getCurrentPosition();
@@ -93,9 +82,6 @@ class PresensiProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Dipanggil untuk setiap frame dari `startImageStream`. Frame diabaikan
-  /// selama masih memproses frame sebelumnya (throttle alami) supaya UI
-  /// tidak jank dan inferensi TFLite tidak overload.
   Future<void> processFrame({
     required CameraImage image,
     required CameraDescription camera,
@@ -135,9 +121,6 @@ class PresensiProvider extends ChangeNotifier {
       livenessMessage = result.isReal ? null : AppStrings.gagalLiveness;
       notifyListeners();
 
-      // Pre-filter lokal murni untuk menghemat panggilan server (jangan
-      // submit setiap frame) - keputusan REAL/SPOOF final tetap di server
-      // lewat threshold `anti_spoof_threshold`, skor mentah tetap dikirim.
       if (!result.isReal) return;
 
       final embedding = _faceEmbeddingService.embedFromCameraImage(
@@ -181,14 +164,13 @@ class PresensiProvider extends ChangeNotifier {
       attendanceIdTercatat = result.attendanceId;
     } on SubmitAttendanceException catch (e) {
       if (e.code == 'FAIL_DUPLICATE') {
-        // Sudah tercatat dari percobaan sebelumnya - bukan kegagalan.
+
         sudahTercatat = true;
         faceMatchStatus = CekStatus.valid;
       } else {
         faceMatchStatus = CekStatus.invalid;
         faceMatchMessage = e.userMessage;
-        // Kegagalan yang terkait wajah boleh dicoba ulang frame berikutnya;
-        // kegagalan sesi/duplikat/dsb bersifat final untuk sesi ini.
+
         if (e.code != 'FAIL_LIVENESS' && e.code != 'FAIL_FACE_MATCH') {
           gagalDicatat = true;
           errorUmum = e.userMessage;
@@ -206,8 +188,6 @@ class PresensiProvider extends ChangeNotifier {
   bool clockOutBusy = false;
   String? clockOutError;
 
-  /// Clock Out: hanya catat waktu & lokasi (tanpa verifikasi liveness/wajah
-  /// ulang, sesuai keputusan produk) - lewat Edge Function `submit-checkout`.
   Future<bool> clockOut(String attendanceId) async {
     clockOutBusy = true;
     clockOutError = null;

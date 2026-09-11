@@ -1,4 +1,3 @@
--- Enable + force RLS on every table (FORCE also applies to table owners).
 do $$
 declare t text;
 begin
@@ -15,12 +14,8 @@ begin
   end loop;
 end $$;
 
--- Lock down default grants; every table below gets an explicit, minimal grant.
 revoke all on all tables in schema public from authenticated, anon;
 
-------------------------------------------------------------------
--- users
-------------------------------------------------------------------
 grant select, update on users to authenticated;
 
 create policy users_select_self on users for select to authenticated
@@ -37,9 +32,6 @@ create policy users_update_self_profile on users for update to authenticated
 create policy users_all_admin on users for all to authenticated
   using (app.is_admin()) with check (app.is_admin());
 
-------------------------------------------------------------------
--- students
-------------------------------------------------------------------
 grant select, update on students to authenticated;
 
 create policy students_select_self on students for select to authenticated
@@ -56,33 +48,22 @@ create policy students_update_self_limited on students for update to authenticat
 create policy students_write_admin on students for all to authenticated
   using (app.is_admin()) with check (app.is_admin());
 
-------------------------------------------------------------------
--- lecturers
-------------------------------------------------------------------
 grant select on lecturers to authenticated;
 
 create policy lecturers_select_all on lecturers for select to authenticated using (true);
 create policy lecturers_write_admin on lecturers for all to authenticated
   using (app.is_admin()) with check (app.is_admin());
 
-------------------------------------------------------------------
--- face_profiles / face_profile_history — strictest table, no client SELECT/INSERT/UPDATE at all.
-------------------------------------------------------------------
-grant select on face_profiles to authenticated; -- SELECT policy below limits to admin only
+grant select on face_profiles to authenticated;
 create policy face_select_admin on face_profiles for select to authenticated
   using (app.is_admin());
 create policy face_write_admin on face_profiles for all to authenticated
   using (app.is_admin()) with check (app.is_admin());
--- No client policy for INSERT/UPDATE by students/lecturers: enrollment goes through
--- the enroll-face Edge Function using the service role, which bypasses RLS.
 
 grant select on face_profile_history to authenticated;
 create policy face_history_admin on face_profile_history for select to authenticated
   using (app.is_admin());
 
-------------------------------------------------------------------
--- Academic reference tables: readable by all authenticated, writable by admin only.
-------------------------------------------------------------------
 do $$
 declare t text;
 begin
@@ -93,12 +74,6 @@ begin
   end loop;
 end $$;
 
-------------------------------------------------------------------
--- locations — coordinates hidden from ALL clients at the table level (column
--- grants apply to the shared `authenticated` Postgres role, so they can't
--- distinguish student/lecturer/admin). Admin/lecturer read full rows via the
--- SECURITY DEFINER function `app.locations_full()` below instead.
-------------------------------------------------------------------
 grant select (id, parent_id, kind, code, name, building, floor, capacity, is_active, created_at, updated_at)
   on locations to authenticated;
 
@@ -113,9 +88,6 @@ $$;
 revoke execute on function app.locations_full() from public, anon;
 grant execute on function app.locations_full() to authenticated;
 
-------------------------------------------------------------------
--- course_classes / course_class_lecturers
-------------------------------------------------------------------
 grant select, update on course_classes to authenticated;
 
 create policy cc_select_enrolled on course_classes for select to authenticated
@@ -133,9 +105,6 @@ create policy ccl_select_visible on course_class_lecturers for select to authent
 create policy ccl_write_admin on course_class_lecturers for all to authenticated
   using (app.is_admin()) with check (app.is_admin());
 
-------------------------------------------------------------------
--- enrollments (KRS) — students read-only, never write their own KRS.
-------------------------------------------------------------------
 grant select on enrollments to authenticated;
 
 create policy enr_select_self on enrollments for select to authenticated
@@ -147,9 +116,6 @@ create policy enr_select_admin on enrollments for select to authenticated
 create policy enr_write_admin on enrollments for all to authenticated
   using (app.is_admin()) with check (app.is_admin());
 
-------------------------------------------------------------------
--- schedules
-------------------------------------------------------------------
 grant select on schedules to authenticated;
 
 create policy sch_select_enrolled on schedules for select to authenticated
@@ -161,9 +127,6 @@ create policy sch_select_admin on schedules for select to authenticated
 create policy sch_write_admin on schedules for all to authenticated
   using (app.is_admin()) with check (app.is_admin());
 
-------------------------------------------------------------------
--- meeting_sessions — students SELECT only; lecturers can create/update/cancel their own.
-------------------------------------------------------------------
 grant select, insert, update on meeting_sessions to authenticated;
 
 create policy ms_select_enrolled on meeting_sessions for select to authenticated
@@ -179,9 +142,6 @@ create policy ms_update_lecturer on meeting_sessions for update to authenticated
 create policy ms_all_admin on meeting_sessions for all to authenticated
   using (app.is_admin()) with check (app.is_admin());
 
-------------------------------------------------------------------
--- attendance_records — the crown jewels. NO client INSERT/DELETE policy at all.
-------------------------------------------------------------------
 grant select, update on attendance_records to authenticated;
 
 create policy ar_select_self on attendance_records for select to authenticated
@@ -195,11 +155,7 @@ create policy ar_update_lecturer_override on attendance_records for update to au
   with check (app.teaches_class(course_class_id) and is_manual = true and overridden_by = auth.uid());
 create policy ar_update_admin on attendance_records for update to authenticated
   using (app.is_admin()) with check (app.is_admin());
--- No INSERT/DELETE policy for any client role: only the service role (Edge Functions) writes here.
 
-------------------------------------------------------------------
--- attendance_verifications — append-only research log.
-------------------------------------------------------------------
 grant select, update on attendance_verifications to authenticated;
 
 create policy av_select_self on attendance_verifications for select to authenticated
@@ -210,15 +166,7 @@ create policy av_select_admin on attendance_verifications for select to authenti
   using (app.is_admin());
 create policy av_update_label_admin on attendance_verifications for update to authenticated
   using (app.is_admin()) with check (app.is_admin());
--- No INSERT/DELETE policy for any client role: service role only.
 
-------------------------------------------------------------------
--- attendance_challenges — no client policies at all (service role only).
-------------------------------------------------------------------
-
-------------------------------------------------------------------
--- leave_requests
-------------------------------------------------------------------
 grant select, insert, update on leave_requests to authenticated;
 
 create policy lr_select_self on leave_requests for select to authenticated
@@ -241,9 +189,6 @@ create policy lr_review_lecturer on leave_requests for update to authenticated
 create policy lr_all_admin on leave_requests for all to authenticated
   using (app.is_admin()) with check (app.is_admin());
 
-------------------------------------------------------------------
--- notifications / notification_recipients
-------------------------------------------------------------------
 grant select, insert on notifications to authenticated;
 
 create policy notif_select_targeted on notifications for select to authenticated
@@ -274,9 +219,6 @@ create policy nr_insert_self on notification_recipients for insert to authentica
 create policy nr_update_self on notification_recipients for update to authenticated
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 
-------------------------------------------------------------------
--- app_settings — only is_public rows readable by clients.
-------------------------------------------------------------------
 grant select on app_settings to authenticated;
 
 create policy settings_select_public on app_settings for select to authenticated
@@ -286,16 +228,10 @@ create policy settings_select_admin on app_settings for select to authenticated
 create policy settings_write_admin on app_settings for all to authenticated
   using (app.is_admin()) with check (app.is_admin());
 
-------------------------------------------------------------------
--- audit_logs — admin read-only; writes via SECURITY DEFINER triggers/service role only.
-------------------------------------------------------------------
 grant select on audit_logs to authenticated;
 create policy audit_select_admin on audit_logs for select to authenticated
   using (app.is_admin());
 
-------------------------------------------------------------------
--- device_bindings, provisioned_accounts — admin only from the client side.
-------------------------------------------------------------------
 grant select on device_bindings to authenticated;
 create policy device_bindings_admin on device_bindings for all to authenticated
   using (app.is_admin()) with check (app.is_admin());

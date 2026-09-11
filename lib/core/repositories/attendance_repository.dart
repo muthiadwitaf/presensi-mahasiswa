@@ -1,6 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Hasil sukses `submit-attendance`.
 class SubmitAttendanceResult {
   const SubmitAttendanceResult({
     required this.attendanceId,
@@ -8,21 +7,15 @@ class SubmitAttendanceResult {
     required this.minutesLate,
   });
   final String attendanceId;
-  final String status; // HADIR / TERLAMBAT
+  final String status;
   final int minutesLate;
 }
 
-/// Kegagalan `submit-attendance` - `code` adalah salah satu FAIL_* dari Edge
-/// Function (lihat submit-attendance/index.ts), TERMASUK "FAIL_RISK" yang
-/// sengaja tidak ada di enum `verification_outcome` DB (dicatat sebagai
-/// ERROR di server, tapi tetap dikembalikan sebagai kode ini ke client).
 class SubmitAttendanceException implements Exception {
   const SubmitAttendanceException(this.code, this.message);
   final String code;
   final String message;
 
-  /// Pesan berorientasi pengguna, bukan jargon teknis (lihat prinsip UI di
-  /// spec: jangan tampilkan "FAIL_FACE_MATCH" mentah ke mahasiswa).
   String get userMessage => switch (code) {
         'FAIL_LIVENESS' => 'Verifikasi wajah gagal, pastikan pencahayaan cukup dan coba lagi',
         'FAIL_FACE_MATCH' => 'Wajah tidak cocok dengan data yang terdaftar',
@@ -42,10 +35,6 @@ class SubmitAttendanceException implements Exception {
   String toString() => 'SubmitAttendanceException($code: $message)';
 }
 
-/// Membungkus Edge Function `submit-attendance`/`submit-checkout` - client
-/// HANYA mengirim evidence (embedding, skor liveness, lokasi), server yang
-/// memutuskan status. Lihat catatan arsitektur di audit Fase 1 percakapan
-/// ini - client tidak pernah menulis `status = HADIR` langsung ke DB.
 class AttendanceRepository {
   AttendanceRepository({SupabaseClient? client}) : _client = client ?? Supabase.instance.client;
 
@@ -111,9 +100,6 @@ class AttendanceRepository {
     }
   }
 
-  /// Daftar hadir untuk satu meeting session (dipakai dosen di tab "Daftar
-  /// Hadir") - RLS `attendance_records` sudah membatasi ke sesi yang
-  /// memang diampu dosen tsb.
   Future<List<Map<String, dynamic>>> attendeesForSession(String meetingSessionId) async {
     final rows = await _client
         .from('attendance_records')
@@ -123,8 +109,6 @@ class AttendanceRepository {
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
-  /// Riwayat presensi mahasiswa sendiri - RLS `attendance_records` sudah
-  /// membatasi ke baris milik sendiri, tidak perlu filter student_id manual.
   Future<List<Map<String, dynamic>>> myAttendanceHistory({int limit = 200}) async {
     final rows = await _client
         .from('attendance_records')

@@ -63,9 +63,7 @@ class _PresensiFlowScreenState extends State<PresensiFlowScreen> with WidgetsBin
       }
 
       await provider.siapkanModel();
-      // Rekam lokasi live sebagai evidence yang dikirim ke server bersama
-      // hasil verifikasi wajah - kegagalan lokasi tidak menghalangi alur
-      // presensi di client, server yang memutuskan apakah lokasi wajib.
+
       unawaited(provider.catatLokasiSaatIni());
 
       final cameras = await availableCameras();

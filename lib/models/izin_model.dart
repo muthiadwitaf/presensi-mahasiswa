@@ -1,69 +1,87 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+enum StatusIzin { pending, disetujui, ditolak, dibatalkan }
 
-enum StatusIzin { pending, disetujui, ditolak }
-
-StatusIzin statusIzinFromString(String value) {
-  return StatusIzin.values.firstWhere(
-    (s) => s.name == value,
-    orElse: () => StatusIzin.pending,
-  );
+StatusIzin statusIzinFromDb(String value) {
+  return switch (value) {
+    'APPROVED' => StatusIzin.disetujui,
+    'REJECTED' => StatusIzin.ditolak,
+    'CANCELLED' => StatusIzin.dibatalkan,
+    _ => StatusIzin.pending,
+  };
 }
+
+String statusIzinToDb(StatusIzin status) {
+  return switch (status) {
+    StatusIzin.pending => 'PENDING',
+    StatusIzin.disetujui => 'APPROVED',
+    StatusIzin.ditolak => 'REJECTED',
+    StatusIzin.dibatalkan => 'CANCELLED',
+  };
+}
+
+enum JenisIzin { izin, sakit }
+
+JenisIzin jenisIzinFromDb(String? value) => value == 'SAKIT' ? JenisIzin.sakit : JenisIzin.izin;
+String jenisIzinToDb(JenisIzin jenis) => jenis == JenisIzin.sakit ? 'SAKIT' : 'IZIN';
 
 class IzinModel {
   final String id;
-  final String mahasiswaUid;
+  final String studentId;
   final String mahasiswaNama;
   final String mahasiswaNim;
-  final String jadwalId;
+  final String? courseClassId;
   final String matkulNama;
+  final String semesterLabel;
+  final JenisIzin jenis;
   final DateTime tanggal;
   final String alasan;
-  final String? buktiBase64;
+  final String? attachmentPath;
   final StatusIzin status;
   final DateTime createdAt;
+  final DateTime? reviewedAt;
+  final String? reviewNote;
 
   const IzinModel({
     required this.id,
-    required this.mahasiswaUid,
+    required this.studentId,
     required this.mahasiswaNama,
     required this.mahasiswaNim,
-    required this.jadwalId,
+    this.courseClassId,
     required this.matkulNama,
+    required this.semesterLabel,
+    required this.jenis,
     required this.tanggal,
     required this.alasan,
-    this.buktiBase64,
+    this.attachmentPath,
     required this.status,
     required this.createdAt,
+    this.reviewedAt,
+    this.reviewNote,
   });
 
-  factory IzinModel.fromMap(String id, Map<String, dynamic> map) {
+  factory IzinModel.fromRow(Map<String, dynamic> row) {
+    final student = row['students'] as Map<String, dynamic>?;
+    final courseClass = row['course_classes'] as Map<String, dynamic>?;
+    final course = courseClass?['courses'] as Map<String, dynamic>?;
+    final term = courseClass?['academic_terms'] as Map<String, dynamic>?;
+    final semesterLabel = term != null
+        ? '${term['academic_year']} ${term['semester_type'] == 'GENAP' ? 'Genap' : 'Ganjil'}'
+        : 'Semester lain';
     return IzinModel(
-      id: id,
-      mahasiswaUid: map['mahasiswaUid'] as String? ?? '',
-      mahasiswaNama: map['mahasiswaNama'] as String? ?? '',
-      mahasiswaNim: map['mahasiswaNim'] as String? ?? '',
-      jadwalId: map['jadwalId'] as String? ?? '',
-      matkulNama: map['matkulNama'] as String? ?? '',
-      tanggal: (map['tanggal'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      alasan: map['alasan'] as String? ?? '',
-      buktiBase64: map['buktiBase64'] as String?,
-      status: statusIzinFromString(map['status'] as String? ?? 'pending'),
-      createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      id: row['id'] as String,
+      studentId: row['student_id'] as String,
+      mahasiswaNama: student?['full_name'] as String? ?? '',
+      mahasiswaNim: student?['nim'] as String? ?? '',
+      courseClassId: row['course_class_id'] as String?,
+      matkulNama: course?['name'] as String? ?? '',
+      semesterLabel: semesterLabel,
+      jenis: jenisIzinFromDb(row['leave_type'] as String?),
+      tanggal: DateTime.parse(row['date_from'] as String),
+      alasan: row['reason'] as String? ?? '',
+      attachmentPath: row['attachment_path'] as String?,
+      status: statusIzinFromDb(row['status'] as String? ?? 'PENDING'),
+      createdAt: DateTime.parse(row['created_at'] as String),
+      reviewedAt: row['reviewed_at'] != null ? DateTime.parse(row['reviewed_at'] as String) : null,
+      reviewNote: row['review_note'] as String?,
     );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'mahasiswaUid': mahasiswaUid,
-      'mahasiswaNama': mahasiswaNama,
-      'mahasiswaNim': mahasiswaNim,
-      'jadwalId': jadwalId,
-      'matkulNama': matkulNama,
-      'tanggal': Timestamp.fromDate(tanggal),
-      'alasan': alasan,
-      'buktiBase64': buktiBase64,
-      'status': status.name,
-      'createdAt': Timestamp.fromDate(createdAt),
-    };
   }
 }

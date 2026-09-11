@@ -28,9 +28,6 @@ create table device_bindings (
   unique (user_id, device_id_hash)
 );
 
--- Pre-provisioned roster + self-activation: role is decided by admin, in the
--- DB, before the student ever signs up. The registration screen only asks
--- for username/activation code/password.
 create table provisioned_accounts (
   id uuid primary key default gen_random_uuid(),
   username text not null unique,

@@ -1,4 +1,3 @@
--- Room catalogue + geofence tree (ROOM -> BUILDING -> CAMPUS). Replaces `ruang`.
 create table locations (
   id            uuid primary key default gen_random_uuid(),
   parent_id     uuid references locations(id) on delete set null,
@@ -25,7 +24,6 @@ create table locations (
 create index locations_parent_idx on locations(parent_id);
 create index locations_kind_idx   on locations(kind) where is_active;
 
--- Plain haversine distance in metres; PostGIS is unnecessary at campus scale.
 create or replace function app.haversine_meters(
   lat1 double precision, lng1 double precision,
   lat2 double precision, lng2 double precision

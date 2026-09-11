@@ -34,8 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _wajahTerdaftarFuture = _faceProfileRepo.status().then((s) => s.hasProfile);
     WidgetsBinding.instance.addPostFrameCallback((_) => _muatJadwal());
-    // Postgres bukan realtime stream seperti Firestore dulu - refresh
-    // berkala supaya jendela waktu sesi & data tetap akurat.
+
     _ticker = Timer.periodic(const Duration(seconds: 30), (_) => _muatJadwal());
   }
 

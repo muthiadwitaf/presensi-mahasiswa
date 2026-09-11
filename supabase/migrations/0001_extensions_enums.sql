@@ -1,7 +1,5 @@
--- Extensions
 create extension if not exists pgcrypto;
 
--- Enum types
 create type user_role         as enum ('mahasiswa','dosen','admin');
 create type user_status       as enum ('pending','active','suspended','inactive');
 create type delivery_mode     as enum ('ONLINE','OFFLINE','HYBRID');

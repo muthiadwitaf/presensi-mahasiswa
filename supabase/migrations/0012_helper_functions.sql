@@ -1,4 +1,3 @@
--- Role from the JWT app_metadata claim (server-controlled), with a DB fallback.
 create or replace function app.current_role() returns user_role
 language plpgsql stable security definer set search_path = '' as $$
 declare r text;

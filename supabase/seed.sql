@@ -1,8 +1,3 @@
--- Demo dataset for Fase 1 verification. Coordinates are PLACEHOLDERS (Jakarta
--- area) — replace campus_latitude/campus_longitude in app_settings and the
--- `locations` rows below with your real campus coordinates before any real
--- geofence testing.
-
 insert into academic_terms (code, academic_year, semester_type, start_date, end_date, is_active)
 values ('2025/2026-GANJIL', '2025/2026', 'GANJIL', '2025-09-01', '2026-01-31', true);
 
@@ -23,7 +18,6 @@ insert into class_groups (study_program_id, class_type_id, code, name, entry_yea
 select sp.id, ct.id, 'TI-EXT-1', 'TI Ekstensi 1', 2023, 5
 from study_programs sp, ref_class_types ct where sp.code='TI' and ct.code='EKSTENSI';
 
--- Locations: campus root + one building + a few rooms (PLACEHOLDER coordinates).
 insert into locations (kind, code, name, latitude, longitude, radius_meters, is_geofenced)
 values ('CAMPUS', 'KAMPUS-USM', 'Kampus Utama', -6.302, 106.652, 200, true);
 
@@ -39,9 +33,3 @@ insert into courses (study_program_id, code, name, credits, semester)
 select id, 'TI301', 'Pemrograman Mobile', 3, 5 from study_programs where code='TI';
 insert into courses (study_program_id, code, name, credits, semester)
 select id, 'TI302', 'Basis Data Lanjut', 3, 5 from study_programs where code='TI';
-
--- NOTE: lecturers/students/course_classes/enrollments/schedules require real
--- auth.users rows (created via activate-account, not raw SQL). After you
--- provision demo accounts through admin-provision-user + activate-account,
--- run a second seed pass to link course_classes/schedules/enrollments to the
--- resulting lecturer_id/student_id/class_group_id values.

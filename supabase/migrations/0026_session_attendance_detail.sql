@@ -1,10 +1,3 @@
--- Tambah minutes_late + koordinat check-in ke my_sessions_on/between,
--- dipakai kartu "Absensi Hari Ini" untuk banner "Tepat waktu/Terlambat X
--- menit" dan baris lokasi - sebelumnya cuma status+jam.
---
--- Postgres tidak izinkan CREATE OR REPLACE mengubah return type (OUT
--- params) fungsi yang sudah ada - drop dulu semua yang tipe returnnya
--- berubah, dalam urutan aman (wrapper public.* dulu, baru app.*).
 drop function if exists public.my_sessions_on(date);
 drop function if exists public.my_sessions_between(date, date);
 drop function if exists app.my_sessions_on(date);

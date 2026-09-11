@@ -1,5 +1,3 @@
--- Prevent a user from ever self-elevating role/status/username, even though
--- the UPDATE policy on `users` otherwise allows self-updates to the row.
 create or replace function app.guard_user_privileged_columns()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
@@ -18,7 +16,6 @@ create trigger users_guard_privileged_trg
   before update on users
   for each row execute function app.guard_user_privileged_columns();
 
--- Students may not change their own academic identity columns.
 create or replace function app.guard_student_privileged_columns()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
@@ -36,7 +33,6 @@ create trigger students_guard_privileged_trg
   before update on students
   for each row execute function app.guard_student_privileged_columns();
 
--- Lecturers cannot retroactively edit a closed past session (admin can).
 create or replace function app.guard_meeting_session_edit()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
@@ -52,10 +48,6 @@ create trigger meeting_sessions_guard_edit_trg
   before update on meeting_sessions
   for each row execute function app.guard_meeting_session_edit();
 
--- Lecturer override on attendance_records may only touch status/override
--- metadata/notes — never the evidence columns (already enforced by the RLS
--- WITH CHECK is_manual=true, but this trigger also blocks evidence tampering
--- even if a future policy change is looser than intended).
 create or replace function app.guard_attendance_record_evidence()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
@@ -82,7 +74,6 @@ create trigger attendance_records_guard_evidence_trg
   before update on attendance_records
   for each row execute function app.guard_attendance_record_evidence();
 
--- attendance_verifications is append-only except for the research-labelling columns.
 create or replace function app.guard_verification_label_only()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
@@ -103,10 +94,6 @@ create trigger attendance_verifications_guard_trg
   before update on attendance_verifications
   for each row execute function app.guard_verification_label_only();
 
--- New auth.users row -> create the matching public.users row. Role is taken
--- ONLY from raw_app_meta_data (service-role-set) or a matching
--- provisioned_accounts entry -- raw_user_meta_data (client-writable) is
--- deliberately never consulted for role.
 create or replace function app.handle_new_auth_user()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare v_role public.user_role; v_pa record; v_username text;

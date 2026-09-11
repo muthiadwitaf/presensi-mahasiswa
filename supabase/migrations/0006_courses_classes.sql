@@ -14,7 +14,6 @@ create table courses (
 );
 create index courses_program_idx on courses(study_program_id);
 
--- A concrete offering: this course, this term, this class group, this lecturer.
 create table course_classes (
   id                  uuid primary key default gen_random_uuid(),
   course_id           uuid not null references courses(id) on delete restrict,
@@ -39,7 +38,6 @@ create index course_classes_term_idx     on course_classes(academic_term_id);
 create index course_classes_lecturer_idx on course_classes(primary_lecturer_id);
 create index course_classes_group_idx    on course_classes(class_group_id);
 
--- Team teaching + the RLS source of truth for "who may manage this class".
 create table course_class_lecturers (
   course_class_id uuid not null references course_classes(id) on delete cascade,
   lecturer_id     uuid not null references lecturers(id) on delete cascade,
@@ -51,7 +49,6 @@ create table course_class_lecturers (
 );
 create index cc_lecturers_lecturer_idx on course_class_lecturers(lecturer_id);
 
--- Keep the junction table in sync whenever primary_lecturer_id is set.
 create or replace function app.sync_primary_lecturer() returns trigger
 language plpgsql as $$
 begin

@@ -1,9 +1,5 @@
 import 'dart:math';
 
-/// Bandingkan dua embedding wajah (hasil MobileFaceNet) pakai jarak
-/// Euclidean — pola & nilai threshold ini mengikuti reference implementation
-/// Flutter yang jadi sumber model (MCarlomagno/FaceRecognitionAuth,
-/// `ml_service.dart`): `threshold = 0.5`, cocok kalau `distance <= threshold`.
 class FaceMatching {
   FaceMatching._();
 

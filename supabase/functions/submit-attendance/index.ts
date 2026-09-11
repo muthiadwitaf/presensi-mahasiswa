@@ -1,7 +1,3 @@
-// The core server-side authority for attendance. The Flutter client sends
-// EVIDENCE ONLY (never a status) — this function is the only writer of
-// attendance_records.status. See plan doc §H / design doc §5.1 for the
-// ordered validation steps this mirrors.
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { requireUser, serviceClient } from "../_shared/clients.ts";
 
@@ -32,7 +28,6 @@ Deno.serve(async (req: Request) => {
   const started = Date.now();
   const admin = serviceClient();
 
-  // Step 1: authenticated
   const auth = await requireUser(req);
   if ("error" in auth) return errorResponse("AUTH", auth.error, 401);
 
@@ -74,7 +69,6 @@ Deno.serve(async (req: Request) => {
       p_experiment_tag: experiment_tag ?? null,
     }).then(() => undefined);
 
-  // Step 2: valid student — resolved from the JWT, never trusted from payload.
   const { data: student, error: studentErr } = await admin
     .from("students").select("id, academic_status").eq("user_id", auth.user.id).single();
   const studentId: string | null = student?.id ?? null;
@@ -85,7 +79,6 @@ Deno.serve(async (req: Request) => {
     return errorResponse("AUTH", "Akun mahasiswa tidak valid", 403);
   }
 
-  // Step 3: session resolution (materialize from template if needed)
   let session;
   if (meeting_session_id) {
     const { data } = await admin.from("meeting_sessions").select("*").eq("id", meeting_session_id).single();
@@ -105,7 +98,6 @@ Deno.serve(async (req: Request) => {
   }
   const resolvedCourseClassId = session.course_class_id;
 
-  // Step 4: enrolment
   const { data: enrollment } = await admin
     .from("enrollments").select("id")
     .eq("student_id", studentId).eq("course_class_id", resolvedCourseClassId).eq("status", "ACTIVE")
@@ -115,13 +107,11 @@ Deno.serve(async (req: Request) => {
     return errorResponse("FAIL_NOT_ENROLLED", "Anda tidak terdaftar pada kelas ini", 403);
   }
 
-  // Step 5: session open
   if (!["SCHEDULED", "OPEN", "ONGOING"].includes(session.status)) {
     await logFail("FAIL_SESSION_CLOSED", "SESSION", "Sesi sudah ditutup");
     return errorResponse("FAIL_SESSION_CLOSED", "Sesi presensi sudah ditutup", 409);
   }
 
-  // Step 6: timing window
   const openBefore = await settingNumber(admin, "checkin_open_before_minutes", 15);
   const closeAfter = await settingNumber(admin, "checkin_close_after_minutes", 30);
   const lateAfter = await settingNumber(admin, "late_after_minutes", 15);
@@ -137,7 +127,6 @@ Deno.serve(async (req: Request) => {
   const minutesLate = Math.max(0, Math.round((now - startsAt) / 60000));
   const status = now > lateThresholdAt ? "TERLAMBAT" : "HADIR";
 
-  // Step 7: challenge/nonce
   let challengeId: string | null = null;
   if (challenge_nonce) {
     const { data: challenge } = await admin
@@ -151,7 +140,6 @@ Deno.serve(async (req: Request) => {
     challengeId = challenge.id;
   }
 
-  // Step 8: duplicate (soft check; DB unique constraint is the hard backstop)
   const { data: existing } = await admin
     .from("attendance_records").select("id").eq("student_id", studentId).eq("meeting_session_id", session.id).maybeSingle();
   if (existing) {
@@ -159,14 +147,12 @@ Deno.serve(async (req: Request) => {
     return errorResponse("FAIL_DUPLICATE", "Anda sudah melakukan presensi untuk sesi ini", 409, { attendance_id: existing.id });
   }
 
-  // Step 9: mode match
   verificationMode = session.mode === "ONLINE" ? "ONLINE_FACE" : "FACE_GPS";
   if (session.mode !== "ONLINE" && !location?.latitude) {
     await logFail("FAIL_MODE_MISMATCH", "MODE", "Sesi luring membutuhkan lokasi");
     return errorResponse("FAIL_MODE_MISMATCH", "Sesi ini membutuhkan lokasi GPS", 422);
   }
 
-  // Step 10: geofence (only when enforced)
   let gpsDistance: number | null = null, geofenceRadius: number | null = null, geofenceSource = "SKIPPED";
   const bypassOnline = await settingBool(admin, "allow_online_geofence_bypass", true);
   const shouldGeofence = session.mode !== "ONLINE" || (!bypassOnline && location?.latitude);
@@ -189,7 +175,6 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // Step 11: anti-spoof
   const antiSpoofThreshold = await settingNumber(admin, "anti_spoof_threshold", 0.5);
   const realIsHigh = await settingBool(admin, "anti_spoof_real_is_high_score", true);
   const probReal = realIsHigh ? liveness.score : 1 - liveness.score;
@@ -198,7 +183,6 @@ Deno.serve(async (req: Request) => {
     return errorResponse("FAIL_LIVENESS", "Sistem tidak dapat memastikan wajah asli", 422);
   }
 
-  // Step 12: face match — server recomputes distance vs. the hidden reference embedding.
   const { data: faceProfile } = await admin
     .from("face_profiles").select("embedding, embedding_model").eq("student_id", studentId).eq("is_active", true).maybeSingle();
   if (!faceProfile) {
@@ -220,7 +204,6 @@ Deno.serve(async (req: Request) => {
     return errorResponse("FAIL_FACE_MATCH", "Wajah tidak cocok dengan data yang terdaftar", 422);
   }
 
-  // Step 13: risk score (composite; informational unless above reject threshold)
   let riskScore = 0;
   const riskFlags: string[] = [];
   if (location?.is_mocked) { riskScore += 0.3; riskFlags.push("MOCK_LOCATION"); }
@@ -235,7 +218,6 @@ Deno.serve(async (req: Request) => {
     return errorResponse("FAIL_RISK", "Presensi ditolak karena indikasi risiko tinggi, hubungi dosen/admin", 422);
   }
 
-  // Commit — atomic insert of verification + attendance_records + challenge consumption.
   const { data: committed, error: commitErr } = await admin.rpc("commit_attendance", {
     p_student_id: studentId,
     p_meeting_session_id: session.id,

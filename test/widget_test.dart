@@ -1,7 +1,7 @@
 // Test widget dasar. Test end-to-end penuh (login, presensi, dst) butuh
-// Firebase Emulator Suite atau mocking FirebaseAuth/Firestore yang di luar
-// scope purwarupa ini - lihat README bagian "Verifikasi" untuk cara
-// verifikasi manual di device/emulator Android sungguhan.
+// Supabase lokal atau mocking SupabaseClient yang di luar scope purwarupa
+// ini - lihat README bagian "Verifikasi" untuk cara verifikasi manual di
+// device/emulator Android sungguhan.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

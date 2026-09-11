@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../models/academic_event_model.dart';
 import '../../models/session_today_model.dart';
 
 class EnrolledCourseOption {
@@ -17,11 +18,6 @@ class EnrolledCourseOption {
   }
 }
 
-/// Sumber kebenaran jadwal: `app.resolve_class_days` (jadwal template +
-/// meeting session aktual) lewat RPC pembungkus di
-/// `0021_today_sessions_helpers.sql`. Sengaja TIDAK ada cache lokal - dipanggil
-/// ulang (mis. lewat `JadwalProvider.refresh()`) saat pengguna pull-to-refresh
-/// atau timer periodik, bukan realtime stream seperti Firestore dulu.
 class ScheduleRepository {
   ScheduleRepository({SupabaseClient? client}) : _client = client ?? Supabase.instance.client;
 
@@ -42,6 +38,15 @@ class ScheduleRepository {
     return (rows as List)
         .map((r) => SessionToday.fromRow({...r as Map<String, dynamic>, 'attendance_id': null, 'attendance_status': null}))
         .toList();
+  }
+
+  Future<List<AcademicEvent>> academicEventsBetween(DateTime from, DateTime to) async {
+    final rows = await _client
+        .from('academic_events')
+        .select()
+        .gte('event_date', _dateOnly(from))
+        .lte('event_date', _dateOnly(to));
+    return (rows as List).map((r) => AcademicEvent.fromRow(r as Map<String, dynamic>)).toList();
   }
 
   Future<List<EnrolledCourseOption>> myActiveCourseClasses() async {

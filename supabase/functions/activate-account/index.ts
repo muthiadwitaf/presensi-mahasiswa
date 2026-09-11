@@ -1,7 +1,3 @@
-// Student/lecturer self-activation: they provide their username + the
-// activation code an admin handed them + a password of their choice. Role
-// comes ONLY from the matching provisioned_accounts row — there is no role
-// field in this request at all.
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { serviceClient } from "../_shared/clients.ts";
 
@@ -11,8 +7,6 @@ async function sha256(text: string) {
   return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// ".local" ditolak Supabase Auth (email_address_invalid - bukan TLD publik
-// yang dikenali), diverifikasi langsung lewat /auth/v1/signup.
 const AUTH_DOMAIN = "smartattendance.app";
 
 Deno.serve(async (req: Request) => {
@@ -51,8 +45,6 @@ Deno.serve(async (req: Request) => {
     return errorResponse("ERROR", createErr?.message ?? "Gagal membuat akun", 500);
   }
 
-  // The on_auth_user_created trigger inserts `public.users` and marks
-  // provisioned_accounts as claimed. We only need the role-specific child row.
   if (pa.role === "mahasiswa") {
     await admin.from("students").insert({
       user_id: created.user.id,

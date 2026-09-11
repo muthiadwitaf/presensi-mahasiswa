@@ -1,17 +1,3 @@
--- app.resolve_class_days (0008_schedules_sessions.sql) referensi
--- meeting_sessions/schedules TANPA schema-qualify dan TANPA `set
--- search_path` sendiri - jadi ia memakai search_path yang aktif dari
--- pemanggilnya. Fungsi di 0021 memakai `search_path=''` (mengikuti
--- konvensi keamanan fungsi lain di codebase ini), yang membuat
--- resolve_class_days gagal dengan "relation meeting_sessions does not
--- exist" saat dipanggil dari dalamnya. Diverifikasi langsung lewat
--- percobaan ke /rest/v1/rpc/my_sessions_on.
---
--- Fix: pakai search_path='public' di fungsi-fungsi ini (bodinya sendiri
--- tetap fully-qualified dengan public., jadi tidak mengurangi keamanan),
--- supaya resolve_class_days yang dipanggil di dalamnya tetap bisa
--- resolve tabelnya secara normal.
-
 create or replace function app.my_sessions_between(p_from date, p_to date)
 returns table(
   session_date date, session_source text, meeting_session_id uuid, course_class_id uuid,

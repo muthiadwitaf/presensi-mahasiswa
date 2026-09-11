@@ -7,19 +7,8 @@ import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/auth_background.dart';
 
-/// Pilihan role di UI - beda dari [UserRole] karena "Koordinator Kelas"
-/// BUKAN nilai users.role (tetap berbasis akun mahasiswa + penugasan
-/// role_assignments per class_group, lihat
-/// `supabase/migrations/0024_self_register_coordinator.sql`).
 enum _PilihanRole { mahasiswa, dosen, koordinator }
 
-/// Registrasi mandiri - role dipilih sendiri (mahasiswa/dosen/koordinator
-/// kelas), bukan admin. Ini keputusan produk yang sadar akan trade-off
-/// keamanannya (siapa saja bisa mendaftar sebagai "dosen"/"koordinator"
-/// tanpa verifikasi identitas kampus) - lihat catatan di
-/// `supabase/migrations/0018_self_registration_and_coordinator.sql` dan
-/// `SupabaseAuthService.register`. Cocok untuk kebutuhan demo/skripsi,
-/// TIDAK untuk deployment produksi sungguhan.
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 

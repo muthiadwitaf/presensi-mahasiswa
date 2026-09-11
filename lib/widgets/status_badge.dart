@@ -4,8 +4,6 @@ import '../core/theme/app_theme.dart';
 
 enum StatusBadgeKind { belum, proses, berhasil, gagal }
 
-/// Menampilkan status satu syarat presensi (lokasi/wajah/sesi) secara
-/// eksplisit ke pengguna — dipakai di Beranda supaya bukan pesan generik.
 class StatusBadge extends StatelessWidget {
   const StatusBadge({
     super.key,

@@ -1,8 +1,3 @@
--- Convenience RPC untuk Beranda mahasiswa/dosen: gabungkan resolve_class_days
--- (jadwal template + meeting session aktual) dengan nama matkul/dosen/lokasi
--- dan status presensi mahasiswa (kalau ada), supaya Flutter tidak perlu
--- N+1 query manual per course_class.
-
 create or replace function app.my_sessions_between(p_from date, p_to date)
 returns table(
   session_date date,
@@ -75,9 +70,6 @@ $$;
 revoke execute on function app.my_sessions_on(date) from public, anon;
 grant execute on function app.my_sessions_on(date) to authenticated;
 
--- Variant dosen: sesi yang DIA ampu hari itu, tanpa kolom attendance milik
--- diri sendiri (dosen bukan mahasiswa) - agregat kehadiran per sesi
--- ditangani terpisah nanti (dashboard dosen, belum di fase ini).
 create or replace function app.my_taught_sessions_on(p_date date default current_date)
 returns table(
   session_source text,
@@ -114,8 +106,6 @@ end $$;
 revoke execute on function app.my_taught_sessions_on(date) from public, anon;
 grant execute on function app.my_taught_sessions_on(date) to authenticated;
 
--- Daftar mata kuliah aktif mahasiswa (untuk form seperti pengajuan izin) -
--- tidak terikat tanggal tertentu, beda dari my_sessions_on.
 create or replace function app.my_active_course_classes()
 returns table(course_class_id uuid, course_code text, course_name text)
 language sql stable security definer set search_path = '' as $$

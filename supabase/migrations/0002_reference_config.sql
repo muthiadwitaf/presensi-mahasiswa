@@ -1,4 +1,3 @@
--- Global config app must never hardcode in Dart.
 create table app_settings (
   key           text primary key,
   value         jsonb        not null,
@@ -41,7 +40,6 @@ create table academic_terms (
 create unique index academic_terms_one_active_idx
   on academic_terms ((is_active)) where is_active;
 
--- Seed reference data
 insert into ref_days (day_of_week, code, label_id, label_en, is_weekend, sort_order) values
   (1,'MON','Senin','Monday',false,1),
   (2,'TUE','Selasa','Tuesday',false,2),

@@ -1,12 +1,3 @@
--- Lanjutan keputusan produk di 0018 (registrasi bebas mahasiswa/dosen):
--- sekarang JUGA mengizinkan self-registrasi sebagai Koordinator Kelas.
--- "Koordinator Kelas" BUKAN nilai baru di users.role (tetap 'mahasiswa'
--- sebagai role dasar) - itu penugasan scoped ke satu class_group lewat
--- role_assignments (lihat 0018), dipilih sendiri lewat metadata
--- `class_group_id` saat signUp. Sama seperti role, ini TIDAK divalidasi
--- terhadap identitas kampus sungguhan - trade-off keamanan yang sama
--- seperti registrasi bebas mahasiswa/dosen.
-
 create or replace function app.handle_new_auth_user()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare
@@ -29,7 +20,7 @@ begin
   v_role := coalesce(
       nullif(new.raw_app_meta_data ->> 'role', '')::public.user_role,
       v_pa.role,
-      -- Koordinator Kelas tetap berbasis akun mahasiswa (lihat komentar atas).
+
       case when v_self_role in ('mahasiswa', 'dosen', 'koordinator_kelas')
            then (case when v_self_role = 'koordinator_kelas' then 'mahasiswa' else v_self_role end)::public.user_role
       end);

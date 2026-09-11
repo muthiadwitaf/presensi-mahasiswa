@@ -1,6 +1,3 @@
--- Atomically writes the PASS verification + the authoritative attendance
--- record + consumes the challenge. Called only by submit-attendance via the
--- service role (SECURITY DEFINER so it can also be safe if ever exposed).
 create or replace function app.commit_attendance(
   p_student_id uuid,
   p_meeting_session_id uuid,
@@ -69,7 +66,7 @@ begin
   returning id into v_attendance_id;
 
   if v_attendance_id is null then
-    -- Race lost to a concurrent duplicate submission: return the existing record idempotently.
+
     select id into v_attendance_id from public.attendance_records
       where student_id = p_student_id and meeting_session_id = p_meeting_session_id;
   else
@@ -88,9 +85,6 @@ end $$;
 
 revoke execute on function app.commit_attendance from public, anon, authenticated;
 
--- Logs a FAILED verification attempt (any stage). Called by submit-attendance
--- via the service role for every rejected submission, so the research
--- dataset captures failures, not just successes.
 create or replace function app.log_failed_verification(
   p_student_id uuid,
   p_meeting_session_id uuid,

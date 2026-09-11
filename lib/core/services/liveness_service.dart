@@ -8,8 +8,8 @@ import '../utils/face_crop_util.dart';
 
 class LivenessResult {
   final bool isReal;
-  final double confidence; // 0..1, confidence untuk kelas yang diprediksi
-  final double rawScore; // skor sigmoid mentah, untuk debugging/kalibrasi
+  final double confidence;
+  final double rawScore;
 
   const LivenessResult({
     required this.isReal,
@@ -18,22 +18,11 @@ class LivenessResult {
   });
 }
 
-/// KF-03: klasifikasi wajah terdeteksi ke kelas "real"/"spoof" pakai
-/// MobileNetV2 (.tflite). Model yang dipakai: pretrained dari
-/// `biometric-technologies/liveness-detection-model` (MIT) — lihat README
-/// untuk sumber & cara download. Preprocessing MENGIKUTI kode inferensi asli
-/// model itu (pixel/255.0), bukan skema pixel/127.5-1.0 di draf awal proposal.
 class LivenessService {
   static const modelAssetPath = 'assets/models/model.tflite';
   static const inputSize = 224;
   static const int cpuThreads = 4;
 
-  /// === KALIBRASI WAJIB SEBELUM DEMO/SIDANG ===
-  /// Output model ini satu neuron sigmoid (bukan softmax 2 kelas), tapi arah
-  /// labelnya (skor mendekati 1 = "real" atau sebaliknya) BELUM diverifikasi
-  /// dari dokumentasi sumber model. Jalankan `scripts/calibrate_model.py`
-  /// dengan beberapa contoh foto real & spoof, lalu set konstanta ini sesuai
-  /// hasilnya.
   static const bool realIsHighScore = true;
   static const double threshold = 0.5;
 

@@ -1,9 +1,5 @@
 import 'package:geocoding/geocoding.dart';
 
-/// Ubah koordinat jadi alamat yang bisa dibaca, untuk baris lokasi di kartu
-/// Absensi Hari Ini. Gagal-diam ke null kalau reverse geocoding tidak
-/// tersedia (mis. emulator tanpa Google Play services, atau tidak ada
-/// jaringan) - baris lokasi cukup disembunyikan, bukan mengganggu alur.
 class GeocodingService {
   final _geocoding = Geocoding();
 

@@ -17,9 +17,6 @@ class _Tab {
   const _Tab(this.label, this.icon, this.activeIcon, this.screen);
 }
 
-/// Navigasi utama pakai bottom nav 3 tab (meniru pola app referensi),
-/// bukan drawer - tab kedua berbeda per role: mahasiswa lihat Riwayat
-/// (rekap kehadiran), dosen lihat Kelas (kelola kelas).
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 

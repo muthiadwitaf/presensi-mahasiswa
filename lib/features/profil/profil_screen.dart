@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/repositories/face_profile_repository.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/image_compression.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../izin/izin_screen.dart';
@@ -10,11 +10,20 @@ import '../jadwal/jadwal_screen.dart';
 import '../notifikasi/notifikasi_screen.dart';
 import '../wajah/wajah_terdaftar_screen.dart';
 
-/// Tab "Profil" - berisi info akun + akses ke menu-menu yang tidak masuk
-/// bottom nav utama (Jadwal, Izin/Sakit, Notifikasi, kelola data wajah)
-/// supaya bottom nav tetap ringkas (3 tab) meniru referensi HR app.
-class ProfilScreen extends StatelessWidget {
+class ProfilScreen extends StatefulWidget {
   const ProfilScreen({super.key});
+
+  @override
+  State<ProfilScreen> createState() => _ProfilScreenState();
+}
+
+class _ProfilScreenState extends State<ProfilScreen> {
+  final _faceProfileRepo = FaceProfileRepository();
+  late final Future<FaceProfileStatus> _statusFuture = () {
+    final role = context.read<AuthProvider>().currentUser?.role;
+
+    return role == UserRole.dosen ? Future.value(FaceProfileStatus.none) : _faceProfileRepo.status();
+  }();
 
   @override
   Widget build(BuildContext context) {
@@ -34,18 +43,31 @@ class ProfilScreen extends StatelessWidget {
                   onTap: () => _bukaWajahTerdaftar(context),
                   child: Stack(
                     children: [
-                      CircleAvatar(
-                        radius: 34,
-                        backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
-                        backgroundImage: user.fotoWajahBase64 != null
-                            ? MemoryImage(ImageCompression.decode(user.fotoWajahBase64!))
-                            : null,
-                        child: user.fotoWajahBase64 == null
-                            ? Text(
+                      FutureBuilder<FaceProfileStatus>(
+                        future: _statusFuture,
+                        builder: (context, snapshot) {
+                          final photoPath = snapshot.data?.photoPath;
+                          if (photoPath == null) {
+                            return CircleAvatar(
+                              radius: 34,
+                              backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
+                              child: Text(
                                 user.nama.isNotEmpty ? user.nama[0].toUpperCase() : '?',
                                 style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppTheme.primary),
-                              )
-                            : null,
+                              ),
+                            );
+                          }
+                          return FutureBuilder<String>(
+                            future: _faceProfileRepo.photoSignedUrl(photoPath),
+                            builder: (context, urlSnapshot) {
+                              return CircleAvatar(
+                                radius: 34,
+                                backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
+                                backgroundImage: urlSnapshot.data != null ? NetworkImage(urlSnapshot.data!) : null,
+                              );
+                            },
+                          );
+                        },
                       ),
                       Positioned(
                         right: 0,
@@ -87,8 +109,8 @@ class ProfilScreen extends StatelessWidget {
         const SizedBox(height: 16),
         _MenuTile(
           icon: Icons.calendar_month_outlined,
-          label: 'Jadwal Kuliah',
-          onTap: () => _pushScaffold(context, 'Jadwal Kuliah', const JadwalScreen()),
+          label: 'Kalender Akademik',
+          onTap: () => _pushScaffold(context, 'Kalender Akademik', const JadwalScreen()),
         ),
         if (!isDosen)
           _MenuTile(
@@ -100,11 +122,6 @@ class ProfilScreen extends StatelessWidget {
           icon: Icons.notifications_none,
           label: 'Notifikasi',
           onTap: () => _pushScaffold(context, 'Notifikasi', const NotifikasiScreen()),
-        ),
-        _MenuTile(
-          icon: Icons.face_outlined,
-          label: 'Wajah Terdaftar',
-          onTap: () => _bukaWajahTerdaftar(context),
         ),
         const SizedBox(height: 16),
         _MenuTile(

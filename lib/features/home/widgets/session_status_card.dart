@@ -1,15 +1,14 @@
+import 'dart:async';
+
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/geocoding_service.dart';
+import '../../../core/services/location_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/session_today_model.dart';
 import '../../../providers/presensi_provider.dart';
 
-/// Kartu "Absensi Hari Ini" - tata letak sengaja dibuat ringkas & satu
-/// layar (label + chip status, jam sesi, baris peringatan+tombol aksi,
-/// baris status wajah terdaftar) meniru pola app HR yang sudah lazim
-/// dipakai, bukan checklist panjang bernomor.
 class SessionStatusCard extends StatelessWidget {
   const SessionStatusCard({
     super.key,
@@ -76,12 +75,26 @@ class SessionStatusCard extends StatelessWidget {
             if (adaSesi)
               Padding(
                 padding: const EdgeInsets.only(top: 2),
-                child: Text(
-                  '${sesi!.startTimeLabel} → ${sesi!.endTimeLabel}',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        sudahClockIn && sesi!.checkInAt != null
+                            ? 'Sesi masuk ${DateFormat('HH:mm').format(sesi!.checkInAt!)}'
+                            : '${sesi!.startTimeLabel} → ${sesi!.endTimeLabel}',
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                      ),
+                    ),
+                    if (sudahClockIn && !sudahClockOut && sesi!.checkInAt != null)
+                      _ElapsedTimer(checkInAt: sesi!.checkInAt!),
+                  ],
                 ),
               ),
             const SizedBox(height: 12),
+            if (!sudahClockIn) ...[
+              const _LiveLocationRow(),
+              const SizedBox(height: 10),
+            ],
             if (sudahClockIn) ...[
               _BerhasilBanner(sesi: sesi!),
               const SizedBox(height: 10),
@@ -189,22 +202,28 @@ class SessionStatusCard extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: Text(
-            wajahTerdaftar ? 'Wajah terdaftar' : 'Wajah belum terdaftar',
-            style: TextStyle(
-              fontSize: 13.5,
-              color: wajahTerdaftar ? Colors.black87 : AppTheme.warning,
-              fontWeight: FontWeight.w500,
-            ),
+          child: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  wajahTerdaftar ? 'Wajah terdaftar' : 'Wajah belum terdaftar',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: wajahTerdaftar ? Colors.black87 : AppTheme.warning,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              if (wajahTerdaftar)
+                IconButton(
+                  onPressed: onDaftarWajah,
+                  icon: const Icon(Icons.visibility_outlined, size: 20, color: AppTheme.textSecondary),
+                  tooltip: 'Lihat foto terdaftar',
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
           ),
         ),
-        if (wajahTerdaftar)
-          IconButton(
-            onPressed: onDaftarWajah,
-            icon: const Icon(Icons.visibility_outlined, size: 20, color: AppTheme.textSecondary),
-            tooltip: 'Lihat foto terdaftar',
-            visualDensity: VisualDensity.compact,
-          ),
         TextButton.icon(
           onPressed: onDaftarWajah,
           icon: const Icon(Icons.camera_alt_outlined, size: 16),
@@ -216,9 +235,6 @@ class SessionStatusCard extends StatelessWidget {
   }
 }
 
-/// Banner hijau setelah Clock In berhasil - "Tepat waktu" atau "Terlambat
-/// X menit" berdasarkan status & minutes_late dari server (submit-attendance),
-/// bukan dihitung ulang di client.
 class _BerhasilBanner extends StatelessWidget {
   const _BerhasilBanner({required this.sesi});
   final SessionToday sesi;
@@ -249,8 +265,6 @@ class _BerhasilBanner extends StatelessWidget {
   }
 }
 
-/// Baris lokasi (alamat hasil reverse geocoding) - gagal-diam (tidak
-/// ditampilkan) kalau alamat tidak bisa didapat, lihat [GeocodingService].
 class _LocationRow extends StatefulWidget {
   const _LocationRow({required this.latitude, required this.longitude});
   final double latitude;
@@ -281,6 +295,107 @@ class _LocationRowState extends State<_LocationRow> {
         const SizedBox(width: 6),
         Expanded(
           child: Text(_alamat!, style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600)),
+        ),
+      ],
+    );
+  }
+}
+
+class _ElapsedTimer extends StatefulWidget {
+  const _ElapsedTimer({required this.checkInAt});
+  final DateTime checkInAt;
+
+  @override
+  State<_ElapsedTimer> createState() => _ElapsedTimerState();
+}
+
+class _ElapsedTimerState extends State<_ElapsedTimer> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final berlalu = DateTime.now().difference(widget.checkInAt);
+
+    final aman = berlalu.isNegative ? Duration.zero : berlalu;
+    final jam = aman.inHours.toString().padLeft(2, '0');
+    final menit = (aman.inMinutes % 60).toString().padLeft(2, '0');
+    final detik = (aman.inSeconds % 60).toString().padLeft(2, '0');
+    return Text(
+      '$jam:$menit:$detik',
+      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.primary),
+    );
+  }
+}
+
+class _LiveLocationRow extends StatefulWidget {
+  const _LiveLocationRow();
+
+  @override
+  State<_LiveLocationRow> createState() => _LiveLocationRowState();
+}
+
+class _LiveLocationRowState extends State<_LiveLocationRow> {
+  final _location = LocationService();
+  final _geocoding = GeocodingService();
+  String? _alamat;
+  bool _loading = true;
+  bool _gagal = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _muat();
+  }
+
+  Future<void> _muat() async {
+    try {
+      final posisi = await _location.getCurrentPosition();
+      final alamat = await _geocoding.alamatDari(posisi.latitude, posisi.longitude);
+      if (!mounted) return;
+      setState(() {
+        _alamat = alamat;
+        _loading = false;
+        _gagal = alamat == null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _gagal = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_gagal) return const SizedBox.shrink();
+    return Row(
+      children: [
+        Icon(Icons.location_on_outlined, size: 16, color: Colors.grey.shade600),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            _loading ? 'Mendeteksi lokasi...' : _alamat!,
+            style: TextStyle(
+              fontSize: 12.5,
+              color: Colors.grey.shade600,
+              fontStyle: _loading ? FontStyle.italic : FontStyle.normal,
+            ),
+          ),
         ),
       ],
     );

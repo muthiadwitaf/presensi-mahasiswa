@@ -1,6 +1,3 @@
-// Enrolls/re-enrolls a student's reference face embedding. The client sends
-// a probe embedding + an already-uploaded (or base64) photo — never a raw
-// video, and the stored embedding is never readable back by the client.
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { requireUser, serviceClient } from "../_shared/clients.ts";
 

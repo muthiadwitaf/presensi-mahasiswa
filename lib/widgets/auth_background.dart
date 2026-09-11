@@ -4,9 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
 
-/// Latar gelap bergradasi + "blob" lingkaran blur dekoratif, dipakai di
-/// layar login & register - meniru gaya referensi (dark glassmorphism,
-/// aksen biru-ungu).
 class AuthBackground extends StatelessWidget {
   const AuthBackground({super.key, required this.child});
 
@@ -54,8 +51,6 @@ class _Blob extends StatelessWidget {
   }
 }
 
-/// Kartu "glassmorphic" (semi transparan + blur) untuk form di atas
-/// [AuthBackground].
 class GlassCard extends StatelessWidget {
   const GlassCard({super.key, required this.child, this.padding});
 
