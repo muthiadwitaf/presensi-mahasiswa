@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../utils/edge_function_error.dart';
+
 class SubmitAttendanceResult {
   const SubmitAttendanceResult({
     required this.attendanceId,
@@ -35,10 +37,41 @@ class SubmitAttendanceException implements Exception {
   String toString() => 'SubmitAttendanceException($code: $message)';
 }
 
+class AttendanceChallenge {
+  const AttendanceChallenge({required this.nonce, required this.meetingSessionId});
+  final String nonce;
+  final String meetingSessionId;
+}
+
 class AttendanceRepository {
   AttendanceRepository({SupabaseClient? client}) : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
+
+  Future<AttendanceChallenge> requestChallenge({
+    String? meetingSessionId,
+    String? courseClassId,
+    DateTime? sessionDate,
+  }) async {
+    final res = await _client.functions.invoke(
+      'attendance-challenge',
+      body: {
+        'meeting_session_id': ?meetingSessionId,
+        'course_class_id': ?courseClassId,
+        'session_date': ?(sessionDate != null ? _dateOnly(sessionDate) : null),
+      },
+    );
+    final data = res.data;
+    if (res.status != 200 || data is! Map || data['success'] != true) {
+      final err = parseEdgeFunctionError(data, fallbackMessage: 'Gagal memulai sesi verifikasi (${res.status})');
+      throw StateError(err.message);
+    }
+    final challenge = data['challenge'] as Map;
+    return AttendanceChallenge(
+      nonce: challenge['nonce'] as String,
+      meetingSessionId: challenge['meeting_session_id'] as String,
+    );
+  }
 
   Future<SubmitAttendanceResult> submitAttendance({
     String? meetingSessionId,
@@ -50,7 +83,7 @@ class AttendanceRepository {
     double? longitude,
     double? accuracyM,
     bool? isMocked,
-    String? challengeNonce,
+    required String challengeNonce,
   }) async {
     final res = await _client.functions.invoke(
       'submit-attendance',
@@ -58,7 +91,7 @@ class AttendanceRepository {
         'meeting_session_id': ?meetingSessionId,
         'course_class_id': ?courseClassId,
         'session_date': ?(sessionDate != null ? _dateOnly(sessionDate) : null),
-        'challenge_nonce': ?challengeNonce,
+        'challenge_nonce': challengeNonce,
         'face': {'probe_embedding': probeEmbedding, 'embedding_model': 'mobilefacenet-v1'},
         'liveness': {'score': livenessScore, 'model': 'mobilenetv2-antispoof'},
         if (latitude != null && longitude != null)
@@ -73,9 +106,8 @@ class AttendanceRepository {
 
     final data = res.data;
     if (res.status != 200 || data is! Map || data['success'] != true) {
-      final code = (data is Map ? data['code'] as String? : null) ?? 'ERROR';
-      final message = (data is Map ? data['message'] as String? : null) ?? 'Presensi gagal (${res.status})';
-      throw SubmitAttendanceException(code, message);
+      final err = parseEdgeFunctionError(data, fallbackMessage: 'Presensi gagal (${res.status})');
+      throw SubmitAttendanceException(err.code, err.message);
     }
     final attendance = data['attendance'] as Map;
     return SubmitAttendanceResult(
@@ -95,8 +127,8 @@ class AttendanceRepository {
     );
     final data = res.data;
     if (res.status != 200 || data is! Map || data['success'] != true) {
-      final message = (data is Map ? data['message'] as String? : null) ?? 'Clock out gagal (${res.status})';
-      throw StateError(message);
+      final err = parseEdgeFunctionError(data, fallbackMessage: 'Clock out gagal (${res.status})');
+      throw StateError(err.message);
     }
   }
 

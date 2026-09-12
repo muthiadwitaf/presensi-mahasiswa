@@ -5,7 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/repositories/schedule_repository.dart';
+import '../../core/repositories/schedule_repository.dart' show EnrolledCourseOption;
 import '../../models/izin_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/izin_provider.dart';
@@ -268,12 +268,17 @@ class _FormIzinSheet extends StatefulWidget {
 class _FormIzinSheetState extends State<_FormIzinSheet> {
   final _formKey = GlobalKey<FormState>();
   final _alasanController = TextEditingController();
-  final _scheduleRepo = ScheduleRepository();
-  late final Future<List<EnrolledCourseOption>> _matkulFuture = _scheduleRepo.myActiveCourseClasses();
+  late final Future<List<EnrolledCourseOption>> _matkulFuture;
   EnrolledCourseOption? _matkul;
   JenisIzin _jenis = JenisIzin.izin;
   DateTime _tanggal = DateTime.now();
   File? _bukti;
+
+  @override
+  void initState() {
+    super.initState();
+    _matkulFuture = context.read<IzinProvider>().activeCourseOptions();
+  }
 
   Future<void> _pilihBukti(ImageSource source) async {
     final xfile = await ImagePicker().pickImage(source: source, imageQuality: 70);

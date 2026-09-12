@@ -2,13 +2,16 @@ import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
+import '../constants/face_geometry_config.dart';
+
 class FaceDetectionService {
   FaceDetectionService()
       : _detector = FaceDetector(
           options: FaceDetectorOptions(
             performanceMode: FaceDetectorMode.fast,
-            minFaceSize: 0.15,
+            minFaceSize: FaceGeometryConfig.minFaceSizeRatio,
             enableTracking: false,
+            enableLandmarks: true,
           ),
         );
 

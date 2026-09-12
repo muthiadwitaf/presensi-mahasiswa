@@ -1,5 +1,6 @@
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { requireUser, serviceClient } from "../_shared/clients.ts";
+import { settingNumber } from "../_shared/settings.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -16,15 +17,14 @@ Deno.serve(async (req: Request) => {
 
   const admin = serviceClient();
   const { data: student } = await admin.from("students").select("id").eq("user_id", auth.user.id).single();
-  if (!student) return errorResponse("AUTH", "Akun mahasiswa tidak ditemukan", 403);
+  if (!student) return errorResponse("FORBIDDEN", "Akun mahasiswa tidak ditemukan", 403);
 
-  const { data: minQuality } = await admin.from("app_settings").select("value").eq("key", "face_enroll_min_quality").single();
-  if (typeof quality_score === "number" && quality_score < Number(minQuality?.value ?? 0.5)) {
+  const minQuality = await settingNumber(admin, "face_enroll_min_quality", 0.5);
+  if (typeof quality_score === "number" && quality_score < minQuality) {
     return errorResponse("QUALITY_TOO_LOW", "Kualitas foto wajah terlalu rendah, coba lagi dengan pencahayaan lebih baik", 422);
   }
 
-  const { data: cooldownSetting } = await admin.from("app_settings").select("value").eq("key", "face_enroll_cooldown_hours").single();
-  const cooldownHours = Number(cooldownSetting?.value ?? 24);
+  const cooldownHours = await settingNumber(admin, "face_enroll_cooldown_hours", 24);
   const { data: existing } = await admin
     .from("face_profiles").select("id, embedding, updated_at, version").eq("student_id", student.id).maybeSingle();
   if (existing) {

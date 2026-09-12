@@ -3,12 +3,19 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../core/repositories/izin_repository.dart';
+import '../core/repositories/schedule_repository.dart';
 import '../models/izin_model.dart';
 
 class IzinProvider extends ChangeNotifier {
-  IzinProvider({IzinRepository? izinRepository}) : _izinRepo = izinRepository ?? IzinRepository();
+  IzinProvider({IzinRepository? izinRepository, ScheduleRepository? scheduleRepository})
+      : _izinRepo = izinRepository ?? IzinRepository(),
+        _scheduleRepo = scheduleRepository ?? ScheduleRepository();
 
   final IzinRepository _izinRepo;
+  final ScheduleRepository _scheduleRepo;
+
+  /// Mata kuliah aktif mahasiswa, untuk dropdown pilihan pada form izin.
+  Future<List<EnrolledCourseOption>> activeCourseOptions() => _scheduleRepo.myActiveCourseClasses();
 
   List<IzinModel> mine = [];
   List<IzinModel> pending = [];

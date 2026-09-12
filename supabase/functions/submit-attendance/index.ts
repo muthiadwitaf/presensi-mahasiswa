@@ -1,25 +1,15 @@
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { requireUser, serviceClient } from "../_shared/clients.ts";
-
-function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const R = 6371000;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.asin(Math.sqrt(a));
-}
-
-async function settingNumber(admin: any, key: string, fallback: number) {
-  const { data } = await admin.from("app_settings").select("value").eq("key", key).single();
-  return data ? Number(data.value) : fallback;
-}
-async function settingBool(admin: any, key: string, fallback: boolean) {
-  const { data } = await admin.from("app_settings").select("value").eq("key", key).single();
-  return data ? Boolean(data.value) : fallback;
-}
+import { settingBool, settingNumber } from "../_shared/settings.ts";
+import {
+  euclideanDistance,
+  evaluateAttendanceWindow,
+  evaluateChallenge,
+  evaluateFaceMatch,
+  evaluateGeofence,
+  evaluateLiveness,
+  haversineMeters,
+} from "../_shared/verification.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -76,7 +66,7 @@ Deno.serve(async (req: Request) => {
 
   if (studentErr || !student || student.academic_status !== "AKTIF") {
     await logFail("ERROR", "AUTH", "Akun mahasiswa tidak valid/tidak aktif");
-    return errorResponse("AUTH", "Akun mahasiswa tidak valid", 403);
+    return errorResponse("FORBIDDEN", "Akun mahasiswa tidak valid", 403);
   }
 
   let session;
@@ -119,26 +109,30 @@ Deno.serve(async (req: Request) => {
   const now = Date.now();
   const opensAt = session.checkin_opens_at ? new Date(session.checkin_opens_at).getTime() : startsAt - openBefore * 60000;
   const closesAt = session.checkin_closes_at ? new Date(session.checkin_closes_at).getTime() : startsAt + closeAfter * 60000;
-  if (now < opensAt || now > closesAt) {
+  const lateThresholdAt = session.late_threshold_at ? new Date(session.late_threshold_at).getTime() : startsAt + lateAfter * 60000;
+  const window = evaluateAttendanceWindow({
+    nowMs: now, startsAtMs: startsAt, opensAtMs: opensAt, closesAtMs: closesAt, lateThresholdMs: lateThresholdAt,
+  });
+  if (!window.withinWindow) {
     await logFail("FAIL_WINDOW", "WINDOW", "Di luar jendela waktu presensi");
     return errorResponse("FAIL_WINDOW", "Presensi hanya bisa dilakukan pada jendela waktu yang ditentukan", 409);
   }
-  const lateThresholdAt = session.late_threshold_at ? new Date(session.late_threshold_at).getTime() : startsAt + lateAfter * 60000;
-  const minutesLate = Math.max(0, Math.round((now - startsAt) / 60000));
-  const status = now > lateThresholdAt ? "TERLAMBAT" : "HADIR";
+  const minutesLate = window.minutesLate;
+  const status = window.status;
 
-  let challengeId: string | null = null;
-  if (challenge_nonce) {
-    const { data: challenge } = await admin
-      .from("attendance_challenges").select("id, expires_at, consumed_at, student_id, meeting_session_id")
-      .eq("nonce", challenge_nonce).maybeSingle();
-    if (!challenge || challenge.consumed_at || new Date(challenge.expires_at).getTime() < now
-        || challenge.student_id !== studentId || challenge.meeting_session_id !== session.id) {
-      await logFail("FAIL_CHALLENGE", "CHALLENGE", "Nonce tidak valid/kedaluwarsa/sudah dipakai");
-      return errorResponse("FAIL_CHALLENGE", "Sesi verifikasi kedaluwarsa, silakan ulangi", 409);
-    }
-    challengeId = challenge.id;
+  if (!challenge_nonce) {
+    await logFail("FAIL_CHALLENGE", "CHALLENGE", "challenge_nonce tidak dikirim");
+    return errorResponse("FAIL_CHALLENGE", "Sesi verifikasi tidak ditemukan, silakan ulangi", 409);
   }
+  const { data: challenge } = await admin
+    .from("attendance_challenges").select("id, expires_at, consumed_at, student_id, meeting_session_id")
+    .eq("nonce", challenge_nonce).maybeSingle();
+  const challengeCheck = evaluateChallenge(challenge, now, studentId!, session.id);
+  if (!challengeCheck.valid) {
+    await logFail("FAIL_CHALLENGE", "CHALLENGE", `Nonce tidak valid: ${challengeCheck.reason}`);
+    return errorResponse("FAIL_CHALLENGE", "Sesi verifikasi kedaluwarsa, silakan ulangi", 409);
+  }
+  const challengeId: string = challenge.id;
 
   const { data: existing } = await admin
     .from("attendance_records").select("id").eq("student_id", studentId).eq("meeting_session_id", session.id).maybeSingle();
@@ -164,12 +158,19 @@ Deno.serve(async (req: Request) => {
       geofenceRadius = g.radius_m;
       geofenceSource = g.source;
       const accuracyMax = await settingNumber(admin, "geofence_gps_accuracy_max_meters", 50);
-      if (location.is_mocked || (location.accuracy_m ?? 0) > accuracyMax || gpsDistance > geofenceRadius) {
-        await logFail("FAIL_GEOFENCE", "GEOFENCE",
-          `Di luar area kelas (${Math.round(gpsDistance)}m dari radius ${geofenceRadius}m)`,
-          { gpsDistance });
+      const geofenceCheck = evaluateGeofence({
+        distanceM: gpsDistance, radiusM: geofenceRadius, accuracyM: location.accuracy_m,
+        accuracyMaxM: accuracyMax, isMocked: location.is_mocked,
+      });
+      if (!geofenceCheck.passed) {
+        const reasons: Record<string, string> = {
+          MOCK_LOCATION: "Lokasi terdeteksi palsu (mock location)",
+          LOW_ACCURACY: `Akurasi GPS terlalu rendah (>${accuracyMax}m)`,
+          OUT_OF_RADIUS: `Di luar area kelas (${Math.round(gpsDistance)}m dari radius ${geofenceRadius}m)`,
+        };
+        await logFail("FAIL_GEOFENCE", "GEOFENCE", reasons[geofenceCheck.reason!], { gpsDistance });
         return errorResponse("FAIL_GEOFENCE", "Anda berada di luar area kelas yang diizinkan", 422, {
-          distance_m: Math.round(gpsDistance), allowed_m: geofenceRadius,
+          distance_m: Math.round(gpsDistance), allowed_m: geofenceRadius, reason: geofenceCheck.reason,
         });
       }
     }
@@ -177,8 +178,8 @@ Deno.serve(async (req: Request) => {
 
   const antiSpoofThreshold = await settingNumber(admin, "anti_spoof_threshold", 0.5);
   const realIsHigh = await settingBool(admin, "anti_spoof_real_is_high_score", true);
-  const probReal = realIsHigh ? liveness.score : 1 - liveness.score;
-  if (probReal < antiSpoofThreshold) {
+  const livenessCheck = evaluateLiveness(liveness.score, antiSpoofThreshold, realIsHigh);
+  if (!livenessCheck.isReal) {
     await logFail("FAIL_LIVENESS", "SPOOF", "Skor anti-spoof di bawah threshold");
     return errorResponse("FAIL_LIVENESS", "Sistem tidak dapat memastikan wajah asli", 422);
   }
@@ -191,15 +192,9 @@ Deno.serve(async (req: Request) => {
   }
   const ref: number[] = faceProfile.embedding;
   const probe: number[] = face.probe_embedding;
-  let sumSq = 0;
-  for (let i = 0; i < ref.length; i++) sumSq += (ref[i] - probe[i]) ** 2;
-  const distance = Math.sqrt(sumSq);
+  const distance = euclideanDistance(ref, probe);
   const faceThreshold = await settingNumber(admin, "face_match_threshold", 0.5);
-  if (distance === 0) {
-    await logFail("FAIL_FACE_MATCH", "FACE", "Jarak embedding persis 0 - dicurigai replay", { faceSimilarity: distance });
-    return errorResponse("FAIL_FACE_MATCH", "Verifikasi wajah gagal", 422);
-  }
-  if (distance > faceThreshold) {
+  if (!evaluateFaceMatch(distance, faceThreshold)) {
     await logFail("FAIL_FACE_MATCH", "FACE", "Wajah tidak cocok dengan data terdaftar", { faceSimilarity: distance });
     return errorResponse("FAIL_FACE_MATCH", "Wajah tidak cocok dengan data yang terdaftar", 422);
   }

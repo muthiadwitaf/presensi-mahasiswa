@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
-import '../../core/repositories/face_profile_repository.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/session_today_model.dart';
 import '../../models/user_model.dart';
@@ -27,7 +26,6 @@ class PresensiFlowScreen extends StatefulWidget {
 }
 
 class _PresensiFlowScreenState extends State<PresensiFlowScreen> with WidgetsBindingObserver {
-  final _faceProfileRepo = FaceProfileRepository();
   CameraController? _controller;
   CameraDescription? _camera;
   bool _initializing = true;
@@ -53,7 +51,7 @@ class _PresensiFlowScreenState extends State<PresensiFlowScreen> with WidgetsBin
   Future<void> _init() async {
     final provider = context.read<PresensiProvider>();
     try {
-      final wajahTerdaftar = (await _faceProfileRepo.status()).hasProfile;
+      final wajahTerdaftar = await provider.wajahSudahTerdaftar();
       if (!wajahTerdaftar) {
         setState(() {
           _initError = AppStrings.gagalBelumDaftarWajah;

@@ -6,6 +6,7 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
 
+import '../constants/face_geometry_config.dart';
 import '../utils/face_crop_util.dart';
 
 class FaceEmbeddingService {
@@ -16,7 +17,11 @@ class FaceEmbeddingService {
 
   Interpreter? _interpreter;
   final FaceDetector _fileFaceDetector = FaceDetector(
-    options: FaceDetectorOptions(performanceMode: FaceDetectorMode.accurate, minFaceSize: 0.15),
+    options: FaceDetectorOptions(
+      performanceMode: FaceDetectorMode.accurate,
+      minFaceSize: FaceGeometryConfig.minFaceSizeRatio,
+      enableLandmarks: true,
+    ),
   );
 
   bool get isReady => _interpreter != null;
@@ -30,12 +35,16 @@ class FaceEmbeddingService {
     required CameraImage cameraImage,
     required Rect boundingBox,
     required int rotationDegrees,
+    Offset? leftEye,
+    Offset? rightEye,
   }) {
     final face = cropFaceFromCameraImage(
       cameraImage: cameraImage,
       boundingBox: boundingBox,
       rotationDegrees: rotationDegrees,
       targetSize: inputSize,
+      leftEye: leftEye,
+      rightEye: rightEye,
     );
     return _runEmbedding(face);
   }
@@ -49,16 +58,16 @@ class FaceEmbeddingService {
     final decoded = img.decodeImage(bytes);
     if (decoded == null) return null;
 
-    final box = faces.first.boundingBox;
-    final marginX = box.width * 0.15;
-    final marginY = box.height * 0.15;
-    final left = (box.left - marginX).clamp(0, decoded.width - 1).toInt();
-    final top = (box.top - marginY).clamp(0, decoded.height - 1).toInt();
-    final right = (box.right + marginX).clamp(left + 1, decoded.width.toDouble()).toInt();
-    final bottom = (box.bottom + marginY).clamp(top + 1, decoded.height.toDouble()).toInt();
-
-    final cropped = img.copyCrop(decoded, x: left, y: top, width: right - left, height: bottom - top);
-    final resized = img.copyResize(cropped, width: inputSize, height: inputSize);
+    final detected = faces.first;
+    final leftEye = detected.landmarks[FaceLandmarkType.leftEye]?.position;
+    final rightEye = detected.landmarks[FaceLandmarkType.rightEye]?.position;
+    final resized = alignAndCropFace(
+      image: decoded,
+      boundingBox: detected.boundingBox,
+      targetSize: inputSize,
+      leftEye: leftEye != null ? Offset(leftEye.x.toDouble(), leftEye.y.toDouble()) : null,
+      rightEye: rightEye != null ? Offset(rightEye.x.toDouble(), rightEye.y.toDouble()) : null,
+    );
     return _runEmbedding(resized);
   }
 

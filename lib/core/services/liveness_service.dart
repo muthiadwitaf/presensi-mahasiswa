@@ -39,28 +39,43 @@ class LivenessService {
     required CameraImage cameraImage,
     required Rect boundingBox,
     required int rotationDegrees,
+    Offset? leftEye,
+    Offset? rightEye,
   }) {
-    final interpreter = _interpreter;
-    if (interpreter == null) {
-      throw StateError('Model liveness belum dimuat. Panggil loadModel() dahulu.');
-    }
-
     final resized = cropFaceFromCameraImage(
       cameraImage: cameraImage,
       boundingBox: boundingBox,
       rotationDegrees: rotationDegrees,
       targetSize: inputSize,
+      leftEye: leftEye,
+      rightEye: rightEye,
     );
+    return classifyCroppedImage(resized);
+  }
 
-    final input = _imageToInputTensor(resized);
+  /// Runs inference on an already-cropped face image (see [classify]).
+  /// Split out so the same crop can be reused for a pre-inference quality
+  /// check (blur/brightness) without cropping twice.
+  LivenessResult classifyCroppedImage(img.Image croppedFace) {
+    final interpreter = _interpreter;
+    if (interpreter == null) {
+      throw StateError('Model liveness belum dimuat. Panggil loadModel() dahulu.');
+    }
+
+    final input = _imageToInputTensor(croppedFace);
     final output = List.generate(1, (_) => List.filled(1, 0.0));
     interpreter.run(input, output);
     final score = output[0][0];
 
+    return decide(score);
+  }
+
+  /// Pure threshold decision, split out from [classify] so it can be unit
+  /// tested without a loaded TFLite interpreter/camera frame.
+  static LivenessResult decide(double score) {
     final probReal = realIsHighScore ? score : (1 - score);
     final isReal = probReal >= threshold;
     final confidence = isReal ? probReal : (1 - probReal);
-
     return LivenessResult(isReal: isReal, confidence: confidence, rawScore: score);
   }
 

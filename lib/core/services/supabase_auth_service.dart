@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 import '../../models/user_model.dart';
+import '../utils/edge_function_error.dart';
 
 class SupabaseAuthService {
   SupabaseAuthService({sb.SupabaseClient? client}) : _client = client ?? sb.Supabase.instance.client;
@@ -87,16 +88,10 @@ class SupabaseAuthService {
       },
     );
     if (res.status != 200) {
-      throw StateError(_extractErrorMessage(res.data) ?? 'Aktivasi akun gagal (${res.status})');
+      final err = parseEdgeFunctionError(res.data, fallbackMessage: 'Aktivasi akun gagal (${res.status})');
+      throw StateError(err.message);
     }
   }
 
   Future<void> logout() => _client.auth.signOut();
-
-  String? _extractErrorMessage(dynamic data) {
-    if (data is Map && data['message'] is String) {
-      return data['message'] as String;
-    }
-    return null;
-  }
 }

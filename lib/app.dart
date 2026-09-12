@@ -7,6 +7,7 @@ import 'features/auth/login_screen.dart';
 import 'features/home/home_shell.dart';
 import 'features/splash/splash_screen.dart';
 import 'providers/auth_provider.dart';
+import 'providers/face_enrollment_provider.dart';
 import 'providers/izin_provider.dart';
 import 'providers/jadwal_provider.dart';
 import 'providers/notifikasi_provider.dart';
@@ -24,6 +25,7 @@ class PresensiApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => PresensiProvider()),
         ChangeNotifierProvider(create: (_) => IzinProvider()),
         ChangeNotifierProvider(create: (_) => NotifikasiProvider()),
+        ChangeNotifierProvider(create: (_) => FaceEnrollmentProvider()),
       ],
       child: MaterialApp(
         title: AppStrings.appName,

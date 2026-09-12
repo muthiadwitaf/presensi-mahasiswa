@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../utils/edge_function_error.dart';
+
 class FaceProfileStatus {
   const FaceProfileStatus({required this.hasProfile, this.enrolledAt, this.updatedAt, this.version, this.photoPath});
 
@@ -70,9 +72,8 @@ class FaceProfileRepository {
     );
     final data = res.data;
     if (res.status != 200 || data is! Map || data['success'] != true) {
-      final code = (data is Map ? data['code'] as String? : null) ?? 'ERROR';
-      final message = (data is Map ? data['message'] as String? : null) ?? 'Pendaftaran wajah gagal (${res.status})';
-      throw EnrollFaceException(code, message);
+      final err = parseEdgeFunctionError(data, fallbackMessage: 'Pendaftaran wajah gagal (${res.status})');
+      throw EnrollFaceException(err.code, err.message);
     }
   }
 }

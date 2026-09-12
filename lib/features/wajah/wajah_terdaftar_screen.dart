@@ -3,10 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/repositories/face_profile_repository.dart';
-import '../../core/services/face_embedding_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../providers/face_enrollment_provider.dart';
 
 class WajahTerdaftarScreen extends StatefulWidget {
   const WajahTerdaftarScreen({super.key});
@@ -16,25 +17,17 @@ class WajahTerdaftarScreen extends StatefulWidget {
 }
 
 class _WajahTerdaftarScreenState extends State<WajahTerdaftarScreen> {
-  final _faceProfileRepo = FaceProfileRepository();
-  final _embeddingService = FaceEmbeddingService();
-  bool _busy = false;
   late Future<FaceProfileStatus> _statusFuture;
 
   @override
   void initState() {
     super.initState();
-    _statusFuture = _faceProfileRepo.status();
-  }
-
-  @override
-  void dispose() {
-    _embeddingService.dispose();
-    super.dispose();
+    _statusFuture = context.read<FaceEnrollmentProvider>().status();
   }
 
   Future<void> _ambilFoto() async {
     final picker = ImagePicker();
+    final provider = context.read<FaceEnrollmentProvider>();
 
     final xfile = await picker.pickImage(
       source: ImageSource.camera,
@@ -44,30 +37,21 @@ class _WajahTerdaftarScreenState extends State<WajahTerdaftarScreen> {
     );
     if (xfile == null) return;
 
-    setState(() => _busy = true);
     try {
-      final file = File(xfile.path);
-      if (!_embeddingService.isReady) {
-        await _embeddingService.loadModel();
-      }
-      final embedding = await _embeddingService.embedFromFile(file);
-      if (embedding == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Wajah tidak terdeteksi di foto, coba lagi dengan pencahayaan yang lebih baik'),
-          ));
-        }
+      final berhasil = await provider.daftarkanDariFoto(File(xfile.path));
+      if (!mounted) return;
+      if (!berhasil) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Wajah tidak terdeteksi di foto, coba lagi dengan pencahayaan yang lebih baik'),
+        ));
         return;
       }
 
-      await _faceProfileRepo.enroll(probeEmbedding: embedding, photoBytes: await file.readAsBytes());
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Foto wajah berhasil didaftarkan')));
-        setState(() => _statusFuture = _faceProfileRepo.status());
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Foto wajah berhasil didaftarkan')));
+      setState(() => _statusFuture = provider.status());
 
-        await Future.delayed(const Duration(milliseconds: 600));
-        if (mounted) Navigator.of(context).maybePop();
-      }
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (mounted) Navigator.of(context).maybePop();
     } on EnrollFaceException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.userMessage)));
@@ -76,13 +60,13 @@ class _WajahTerdaftarScreenState extends State<WajahTerdaftarScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal menyimpan foto: $e')));
       }
-    } finally {
-      if (mounted) setState(() => _busy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<FaceEnrollmentProvider>();
+
     return FutureBuilder<FaceProfileStatus>(
       future: _statusFuture,
       builder: (context, snapshot) {
@@ -122,7 +106,7 @@ class _WajahTerdaftarScreenState extends State<WajahTerdaftarScreen> {
                       ),
                     )
                   : FutureBuilder<String>(
-                      future: _faceProfileRepo.photoSignedUrl(photoPath),
+                      future: provider.photoSignedUrl(photoPath),
                       builder: (context, urlSnapshot) {
                         return CircleAvatar(
                           radius: 90,
@@ -146,8 +130,8 @@ class _WajahTerdaftarScreenState extends State<WajahTerdaftarScreen> {
               ),
             const SizedBox(height: 28),
             ElevatedButton.icon(
-              onPressed: _busy ? null : _ambilFoto,
-              icon: _busy
+              onPressed: provider.busy ? null : _ambilFoto,
+              icon: provider.busy
                   ? const SizedBox(
                       height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.camera_alt),

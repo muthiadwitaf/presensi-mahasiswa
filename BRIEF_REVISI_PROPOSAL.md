@@ -86,41 +86,41 @@ yang bilang face recognition tidak dicakup), Saran (hapus/ubah poin yang
 memposisikan face recognition sebagai future work — mungkin ganti dengan
 poin lain, mis. kalibrasi threshold pencocokan wajah yang lebih rigorous).
 
-### 2. Validasi geofencing DIHAPUS (hanya jadi pencatatan lokasi)
+### 2. Geofencing — SUDAH diputuskan: tetap dipakai, kode & judul konsisten
 
-**INI PALING SENSITIF karena "Geofencing" ada di JUDUL skripsi.**
+**Update (2026-09-11): keputusan ini sudah final — geofencing TETAP
+dipakai.** Catatan versi lama di bawah ini (yang bilang validasi radius
+"dihapus total") sudah tidak berlaku dan sempat menyebabkan `README.md`
+mengklaim hal yang bertentangan dengan kode — sudah diperbaiki.
 
-Proposal saat ini (KF-04 & pembahasan terkait) menjelaskan geofencing
-sebagai validasi radius: lokasi perangkat mahasiswa divalidasi terhadap
-radius geofence ruang/gedung kelas sesuai jadwal — presensi ditolak kalau
-di luar radius.
+**Kondisi kode sekarang (verifikasi ulang dari `supabase/functions/
+submit-attendance/index.ts`)**: validasi radius geofence **aktif dan
+mengikat** — presensi ditolak (`FAIL_GEOFENCE`) kalau mahasiswa di luar
+radius, akurasi GPS terlalu buruk, atau lokasi terdeteksi mock. Detail
+teknis untuk ditulis di bab metodologi (lihat juga bagian "Geofencing" di
+`README.md`):
+- Metode jarak: **Haversine**, dihitung server-side di edge function
+  `submit-attendance`.
+- Radius: per-lokasi (`locations.radius_meters`, 10–5000 m) dengan
+  fallback ke setting global `geofence_radius_meters` (default 150 m).
+- Toleransi akurasi GPS: default 50 m (`geofence_gps_accuracy_max_meters`).
+- Deteksi mock location: presensi ditolak kalau device melaporkan lokasi
+  palsu (`is_mocked`).
+- Sesi `ONLINE` di-skip dari validasi radius secara default (tidak relevan
+  secara lokasi fisik); sesi `OFFLINE`/`HYBRID` selalu wajib kirim lokasi
+  dan tervalidasi radius, kecuali sesi/lokasi tertentu memang diset untuk
+  tidak menegakkan geofencing (`require_geofence=false` per sesi atau
+  `is_geofenced=false` per lokasi).
 
-**Kondisi kode sekarang**: validasi radius **dihapus total** atas
-permintaan user. Ruang kelas sekarang cuma data deskriptif (nama + gedung,
-tanpa koordinat/radius). Lokasi GPS live mahasiswa tetap direkam otomatis
-saat Clock In & Clock Out (disimpan sebagai field `clockInLat/Lng` dan
-`clockOutLat/Lng` di Firestore) TAPI hanya sebagai log/audit trail — TIDAK
-LAGI jadi syarat lolos/gagal presensi.
-
-**Yang perlu didiskusikan dengan user & dosen pembimbing** (jangan
-diputuskan sendiri oleh sesi Claude berikutnya, ini keputusan akademis):
-- Apakah **judul skripsi** perlu diubah (kata "Geofencing" mungkin perlu
-  diganti/dihilangkan atau direposisikan jadi "pencatatan lokasi", bukan
-  "geofencing" yang secara teknis berarti validasi batas wilayah)?
-- Kalau judul tetap dipertahankan, bagaimana proposal menjelaskan
-  "geofencing" ini secara jujur ke pembaca/penguji tanpa menyesatkan
-  (karena secara definisi teknis, geofencing = validasi radius, sedangkan
-  yang dilakukan sekarang cuma logging koordinat)?
-- Kemungkinan opsi: (a) revisi judul & seluruh proposal supaya konsisten
-  dengan "pencatatan lokasi" bukan "geofencing", ATAU (b) kembalikan
-  validasi radius geofence ke kode (perlu tanya balik ke user apakah masih
-  mau begitu, saya — sesi sebelumnya — sudah beberapa kali flag risiko ini
-  ke user tapi user tetap memilih menghapusnya).
-- **Rekomendasi saya (sesi sebelumnya)**: opsi (a) lebih realistis
-  mengingat user sudah tegas menghapus validasi radius dua kali dan
-  membangun ulang UI Beranda supaya tidak ada elemen geofencing tersisa.
-  Sarankan ke user secara eksplisit sebelum mulai merevisi, karena ini
-  keputusan yang berdampak ke judul skripsi.
+**Implikasi ke proposal**: judul skripsi **tidak perlu diubah** — istilah
+"Geofencing" tetap akurat secara teknis karena validasi radius memang
+berjalan. Proposal (KF-04 & pembahasan terkait) yang sudah menjelaskan
+geofencing sebagai validasi radius **sudah sesuai** dengan kode; yang
+perlu ditambahkan hanyalah detail implementasi di atas (radius default,
+metode Haversine, aturan per mode ONLINE/OFFLINE) di bab metodologi, dan
+sebutkan bahwa nilai radius & tolerable GPS accuracy adalah parameter yang
+bisa dikonfigurasi (bukan hardcode tunggal) — relevan untuk pembahasan
+keterbatasan/pengujian.
 
 ### 3. Preprocessing model liveness berubah
 

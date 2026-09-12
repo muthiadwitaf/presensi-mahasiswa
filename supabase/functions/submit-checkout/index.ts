@@ -14,7 +14,7 @@ Deno.serve(async (req: Request) => {
 
   const admin = serviceClient();
   const { data: student } = await admin.from("students").select("id").eq("user_id", auth.user.id).single();
-  if (!student) return errorResponse("AUTH", "Akun mahasiswa tidak ditemukan", 403);
+  if (!student) return errorResponse("FORBIDDEN", "Akun mahasiswa tidak ditemukan", 403);
 
   const { data: record } = await admin
     .from("attendance_records").select("id, student_id, check_out_at, meeting_session_id")
